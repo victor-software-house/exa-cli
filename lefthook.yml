@@ -12,7 +12,7 @@ pre-commit:
 commit-msg:
   commands:
     commitlint:
-      run: bunx --bun commitlint --edit {1}
+      run: mise run commitlint -- {1}
 
 pre-push:
   commands:

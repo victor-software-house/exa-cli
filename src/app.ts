@@ -2,7 +2,14 @@ import { writeFileSync } from 'node:fs';
 import { CacheStore, DEFAULT_TTL_SECONDS, defaultCachePath } from '@cli/cache/store';
 import { answer, getContents, search } from '@cli/generated/sdk.gen';
 import type { AnswerData, GetContentsData, SearchData } from '@cli/generated/types.gen';
-import { zAnswerBody, zGetContentsBody, zSearchBody } from '@cli/generated/zod.gen';
+import {
+	type AnswerBody,
+	type GetContentsBody,
+	type SearchBody,
+	zAnswerBody,
+	zGetContentsBody,
+	zSearchBody,
+} from '@cli/generated/zod.gen';
 import { createExaClient } from '@cli/http/client';
 import { cacheMode, executeCached } from '@cli/http/execute';
 import { type JsonValue, parseJson } from '@cli/json';
@@ -69,103 +76,72 @@ function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): void {
 
 async function runSearch(parsed: Extract<Parsed, { command: 'search' }>): Promise<void> {
 	const started = Date.now();
-	if (parsed.request !== undefined) {
-		const body = zSearchBody.parse(parsed.request);
-		await runOperation({
-			parsed,
-			operation: 'search',
-			body,
-			started,
-			fetchBody: async (client) =>
-				parseJson(
-					JSON.stringify(
-						await search({
-							client,
-							// SAFETY: Optique already parsed this with zSearchBody. Hey API's
-							// SearchData['body'] optional keys diverge from Zod output under
-							// exactOptionalPropertyTypes.
-							body: body as SearchData['body'],
-						}),
-					),
-				),
-		});
-		return;
-	}
-	const body = flagSearchBody(parsed);
+	const body =
+		parsed.request !== undefined ? zSearchBody.parse(parsed.request) : flagSearchBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'search',
 		body,
 		started,
-		fetchBody: async (client) => parseJson(JSON.stringify(await search({ client, body }))),
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await search({
+						client,
+						// SAFETY: SearchBody is z.input. Hey API's Data body uses prop?: T;
+						// exactOptionalPropertyTypes rejects T | undefined.
+						body: body as SearchData['body'],
+					}),
+				),
+			),
 	});
 }
 
 async function runContents(parsed: Extract<Parsed, { command: 'contents' }>): Promise<void> {
 	const started = Date.now();
-	if (parsed.request !== undefined) {
-		const body = zGetContentsBody.parse(parsed.request);
-		await runOperation({
-			parsed,
-			operation: 'contents',
-			body,
-			started,
-			fetchBody: async (client) =>
-				parseJson(
-					JSON.stringify(
-						await getContents({
-							client,
-							// SAFETY: Optique already parsed this with zGetContentsBody. Hey API's
-							// GetContentsData['body'] optional keys diverge from Zod output under
-							// exactOptionalPropertyTypes.
-							body: body as GetContentsData['body'],
-						}),
-					),
-				),
-		});
-		return;
-	}
-	const body = flagContentsBody(parsed);
+	const body =
+		parsed.request !== undefined
+			? zGetContentsBody.parse(parsed.request)
+			: flagContentsBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'contents',
 		body,
 		started,
-		fetchBody: async (client) => parseJson(JSON.stringify(await getContents({ client, body }))),
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await getContents({
+						client,
+						// SAFETY: GetContentsBody is z.input. Hey API's Data body uses prop?: T;
+						// exactOptionalPropertyTypes rejects T | undefined.
+						body: body as GetContentsData['body'],
+					}),
+				),
+			),
 	});
 }
 
 async function runAnswer(parsed: Extract<Parsed, { command: 'answer' }>): Promise<void> {
 	const started = Date.now();
-	if (parsed.request !== undefined) {
-		const body = zAnswerBody.parse(parsed.request);
-		await runOperation({
-			parsed,
-			operation: 'answer',
-			body,
-			started,
-			fetchBody: async (client) =>
-				parseJson(
-					JSON.stringify(
-						await answer({
-							client,
-							// SAFETY: Optique already parsed this with zAnswerBody. Hey API's
-							// AnswerData['body'] optional keys diverge from Zod output under
-							// exactOptionalPropertyTypes.
-							body: body as AnswerData['body'],
-						}),
-					),
-				),
-		});
-		return;
-	}
-	const body = flagAnswerBody(parsed);
+	const body =
+		parsed.request !== undefined ? zAnswerBody.parse(parsed.request) : flagAnswerBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'answer',
 		body,
 		started,
-		fetchBody: async (client) => parseJson(JSON.stringify(await answer({ client, body }))),
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await answer({
+						client,
+						// SAFETY: AnswerBody is z.input. Hey API's Data body uses prop?: T;
+						// exactOptionalPropertyTypes rejects T | undefined.
+						body: body as AnswerData['body'],
+					}),
+				),
+			),
 	});
 }
 
@@ -264,11 +240,11 @@ function writeOutput(
 	}
 }
 
-function flagSearchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchData['body'] {
+function flagSearchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchBody {
 	if (parsed.query === undefined) {
 		fail('search requires a query or --request.');
 	}
-	const body: SearchData['body'] = {
+	const body: SearchBody = {
 		query: parsed.query,
 		contents: { highlights: true },
 	};
@@ -284,13 +260,11 @@ function flagSearchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchD
 	return body;
 }
 
-function flagContentsBody(
-	parsed: Extract<Parsed, { command: 'contents' }>,
-): GetContentsData['body'] {
+function flagContentsBody(parsed: Extract<Parsed, { command: 'contents' }>): GetContentsBody {
 	if (parsed.urls.length === 0) {
 		fail('contents requires at least one URL or --request.');
 	}
-	const body: GetContentsData['body'] = {
+	const body: GetContentsBody = {
 		urls: [...parsed.urls],
 		highlights: true,
 	};
@@ -300,7 +274,7 @@ function flagContentsBody(
 	return body;
 }
 
-function flagAnswerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerData['body'] {
+function flagAnswerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerBody {
 	if (parsed.query === undefined) {
 		fail('answer requires a query or --request.');
 	}

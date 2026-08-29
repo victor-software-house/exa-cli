@@ -322,6 +322,8 @@ export const zSearchBody = z.object({
   userLocation: z.string().optional()
 }).and(zCommonRequest);
 
+export type SearchBody = z.input<typeof zSearchBody>;
+
 /**
  * OK
  */
@@ -360,6 +362,8 @@ export const zFindSimilarBody = z.object({
   excludeSourceDomain: z.boolean().optional()
 }).and(zCommonRequest);
 
+export type FindSimilarBody = z.input<typeof zFindSimilarBody>;
+
 /**
  * OK
  */
@@ -374,6 +378,8 @@ export const zGetContentsBody = z.object({
   urls: z.array(z.string()),
   ids: z.array(z.string()).optional()
 }).and(zContentsRequest);
+
+export type GetContentsBody = z.input<typeof zGetContentsBody>;
 
 /**
  * OK
@@ -413,6 +419,8 @@ export const zAnswerBody = z.object({
   }).optional()
 });
 
+export type AnswerBody = z.input<typeof zAnswerBody>;
+
 /**
  * OK
  */
@@ -443,6 +451,8 @@ export const zResearchTasksCreateBody = z.object({
     inferSchema: z.boolean().optional()
   }).optional()
 });
+
+export type ResearchTasksCreateBody = z.input<typeof zResearchTasksCreateBody>;
 
 /**
  * Research task created

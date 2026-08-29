@@ -14,27 +14,28 @@ Public Exa CLI. This is not the infer-lab aggregator.
 | `src/http/` | Hey API client wrapper |
 | `src/output/` | stdout/stderr presenter |
 | `src/generated/` | OpenAPI output — regenerate, do not edit |
-| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release:binaries`) |
+| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release:binaries`). `schema:generate` is the one-liner in `mise.toml`. |
 | `vendor/exa-openapi.yaml` | SHA-pinned Exa spec |
 | `skills/exa/` | skills.sh skill |
 
 ## Invariants
 
-- Generated HTTP types live in `src/generated/`. Run `mise run schema` after bumping `vendor/PIN.md`. Never hand-edit generated files.
+- Generated HTTP types live in `src/generated/`. Run `mise run schema:generate` after bumping `vendor/PIN.md`. Never hand-edit generated files.
 - Cache defaults on. `--refresh` skips reads. `--no-cache` skips reads and writes. Key is SHA-256 of canonical `{ host, operation, body }`.
 - Stdout is the payload. Stderr is progress, errors, cache hits, and “wrote file.” `--json` is the provider body unless `--envelope`.
 - `EXA_API_KEY` or `--api-key`. CLI flag wins. Do not print the key.
-- `--request` is JSON text for that command’s generated body schema (`zSearchBody` / `zGetContentsBody` / `zAnswerBody`). Optique `@optique/zod` parses it. Hey API’s SDK `validator: true` is the HTTP boundary on the same schemas. There is no Hey API ↔ Optique plugin; the generated Zod is the shared contract.
+- `--request` is JSON text for that command’s generated body schema (`zSearchBody` / `zGetContentsBody` / `zAnswerBody`). The matching input types are `SearchBody` / `GetContentsBody` / `AnswerBody`. Optique `@optique/zod` parses it. Hey API’s SDK `validator: true` is the HTTP boundary on the same schemas. There is no Hey API ↔ Optique plugin; the generated Zod is the shared contract. The TypeScript plugin does not emit a standalone body type — only `SearchData` with an inline `body`. Do not write `SearchData['body']` in app code except at the SDK call, where Zod input and Hey API optional keys diverge under `exactOptionalPropertyTypes`.
 - `import "zod/compile"` (and bunfig `preload`) AOT-compiles schemas on first parse for speed. It does not shrink the binary. `z.coerce` flag parsers stay on the runtime path.
 - TypeScript 7 (`typescript@7.0.2`) and Node 26. `tsc` is the native TS 7 binary. Pin `@hey-api/openapi-ts` to the `@next` snapshot (`0.0.0-next-20260824173136`) until stable ships the TypeScript-compiler-API removal. Do not use `0.99.0` — it reads `ts.SyntaxKind` from the package root, which TypeScript 7 does not export.
 - Generated files get `// @ts-nocheck` via `output.header`. The client uses Hey API `auth()` for `x-api-key`, `throwOnError: true`, and SDK `responseStyle: 'data'`. Do not unwrap `{ data, error }` envelopes or stamp generated files after the fact.
-- Do not re-declare request or response shapes in `app.ts`. Flag bodies are Optique-typed fields. `--request` is the generated Zod body. Live tests may `safeParse` CLI stdout as a test of our JSON output.
+- Do not re-declare request or response shapes in `app.ts`. Flag bodies are the generated Zod input types (`SearchBody` / `GetContentsBody` / `AnswerBody`). `--request` is the generated Zod body. Live tests may `safeParse` CLI stdout as a test of our JSON output.
 
 ## Tasks
 
 ```bash
 mise run verify          # lint + typecheck + unit tests + build
-mise run schema          # regenerate src/generated
+mise run schema:generate # regenerate src/generated
+mise run schema:check    # generate, then fail if src/generated drifted
 mise -E test run test:live  # paid Exa calls; skips without EXA_API_KEY
 ```
 

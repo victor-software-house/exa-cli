@@ -80,7 +80,7 @@ run = "bun pm pack --dry-run"
 
 [tasks.commitlint]
 description = "Conventional commit lint"
-run = "commitlint"
+run = "commitlint --edit"
 
 [tasks."changeset:status"]
 description = "Check pending changesets against main"
@@ -94,7 +94,7 @@ run = "changeset version"
 description = "Publish to public npm via Changesets"
 run = "changeset publish"
 
-[tasks.schema]
+[tasks."schema:generate"]
 description = "Regenerate src/generated from the pinned Exa OpenAPI spec"
 run = "openapi-ts"
 

@@ -19,7 +19,16 @@ export default defineConfig({
 		},
 		{
 			name: 'zod',
-			requests: true,
+			requests: {
+				body: {
+					types: {
+						input: {
+							case: 'PascalCase',
+							name: '{{name}}Body',
+						},
+					},
+				},
+			},
 			responses: true,
 		},
 	],

@@ -47,4 +47,4 @@ exa search --request '{"query":"Exa search type auto","contents":{"highlights":t
 
 Do not treat snippets, citations, or generated answers as proof. Read the cited URL before making a factual claim.
 
-`/context` (Exa Code) is not a first-class command. GitHub truth stays `gh` or a pinned submodule.
+`/context` and Agent runs are not commands on this CLI. GitHub truth stays `gh` or a pinned submodule.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 //MISE description="Fail if generated client is out of date"
-//MISE depends=["schema"]
+//MISE depends=["schema:generate"]
 
 import { $ } from 'bun';
 

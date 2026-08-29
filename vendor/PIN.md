@@ -7,4 +7,4 @@
 | File | `exa-openapi-spec.yaml` |
 | Copied as | `vendor/exa-openapi.yaml` |
 
-Do not fetch a floating URL at generate time. Bump the pin by replacing this file, updating the commit above, and running `mise run schema`.
+Do not fetch a floating URL at generate time. Bump the pin by replacing this file, updating the commit above, and running `mise run schema:generate`.
