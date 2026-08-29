@@ -1,0 +1,6 @@
+# Loaded when MISE_ENV contains `dev` (local default via .miserc.toml).
+# Exports EXA_API_KEY from the global fnox `exa` profile so the CLI and
+# `mise run test:live` work without a shell prefix.
+
+[env]
+_.fnox-export = { tools = true, profiles = ["exa"], no_defaults = true, on_missing = "silent", on_failure = "warn", export = ["EXA_API_KEY"] }

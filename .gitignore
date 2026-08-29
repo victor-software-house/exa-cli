@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.tmp/
+.DS_Store
+*.tgz
+coverage/
+.env
+.env.*
+!.env.example
+mise.local.toml
+mise.*.local.toml
+fnox.local.toml
+

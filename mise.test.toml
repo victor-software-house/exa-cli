@@ -1,0 +1,6 @@
+# Loaded when MISE_ENV contains `test`.
+# Same allow-list as mise.dev.toml so `mise -E test run test:live` resolves
+# EXA_API_KEY without the rest of the operator `ai` catalog.
+
+[env]
+_.fnox-export = { tools = true, profiles = ["exa"], no_defaults = true, on_missing = "silent", on_failure = "warn", export = ["EXA_API_KEY"] }

@@ -1,0 +1,99 @@
+min_version = "2026.7.7"
+
+[plugins]
+fnox-export = "https://github.com/victor-software-house/fnox-export.git"
+
+[tools]
+node = "24.20.0"
+bun = "1.4.0"
+lefthook = "latest"
+
+[settings]
+experimental = true
+lockfile = true
+env_cache = true
+env_cache_ttl = "4h"
+fetch_remote_versions_cache = "12h"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[deps.bun]
+auto = true
+run = "bun install --frozen-lockfile"
+
+[hooks]
+postinstall = "lefthook install"
+
+# ── Gates ──
+
+[tasks.verify]
+description = "Full CI-safe verification gate: lint + typecheck + unit tests + build"
+depends = ["lint", "typecheck", "test:unit", "build"]
+run = "echo 'verify passed'"
+
+[tasks.lint]
+description = "Lint: biome + oxlint in parallel"
+depends = ["lint:biome", "lint:oxlint"]
+
+[tasks."lint:biome"]
+hide = true
+run = "biome check ."
+
+[tasks."lint:oxlint"]
+hide = true
+run = "oxlint"
+
+[tasks."lint:fix"]
+description = "Autofix lint: biome --write then oxlint --fix"
+run = ["biome check --write .", "oxlint --fix"]
+
+[tasks.format]
+description = "Format with biome"
+run = "biome format --write ."
+
+[tasks.typecheck]
+description = "TypeScript typecheck (no emit)"
+run = "tsc --noEmit -p tsconfig.json"
+
+[tasks.test]
+description = "Unit tests only. Live suites are mise -E test run test:live."
+run = "bun test test/unit"
+
+[tasks."test:unit"]
+description = "Unit tests only (mocked, CI-safe)"
+run = "bun test test/unit"
+
+[tasks."test:live"]
+description = "Live Exa tests (paid). Needs EXA_API_KEY; use mise -E test or the local dev env."
+run = "bun test test/live"
+
+[tasks.build]
+description = "Build CLI bundle with tsdown"
+sources = ["src/**/*.ts"]
+outputs = ["dist/**"]
+run = "tsdown"
+
+[tasks.pack]
+description = "Dry-run package contents"
+run = "bun pm pack --dry-run"
+
+[tasks.commitlint]
+description = "Conventional commit lint"
+run = "commitlint"
+
+[tasks."changeset:status"]
+description = "Check pending changesets against main"
+run = "changeset status --since=origin/main"
+
+[tasks.version]
+description = "Generate Changesets version PR changes"
+run = "changeset version"
+
+[tasks.release]
+description = "Publish to public npm via Changesets"
+run = "changeset publish"
+
+[tasks."lockfile:sync"]
+description = "Verify bun.lock matches package.json"
+run = "bun install --frozen-lockfile --dry-run"

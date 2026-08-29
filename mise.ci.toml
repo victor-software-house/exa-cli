@@ -1,0 +1,5 @@
+# Loaded when MISE_ENV contains `ci` (GitHub Actions).
+# Do not export operator secrets. Live suites skip when EXA_API_KEY is absent.
+
+[env]
+FNOX_EXPORT_DISABLE = "1"
