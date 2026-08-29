@@ -5,6 +5,7 @@ import type { AnswerData, GetContentsData, SearchData } from '@cli/generated/typ
 import { zAnswerBody, zGetContentsBody, zSearchBody } from '@cli/generated/zod.gen';
 import { createExaClient } from '@cli/http/client';
 import { cacheMode, executeCached } from '@cli/http/execute';
+import { type JsonValue, parseJson } from '@cli/json';
 import {
 	colorEnabled,
 	formatCacheHit,
@@ -14,23 +15,27 @@ import {
 	resolveMode,
 } from '@cli/output/presenter';
 import { envContext, parser } from '@cli/parser';
-import { readJsonBody } from '@cli/request-file';
 import { version } from '@cli/version';
 import { message } from '@optique/core/message';
 import { run } from '@optique/run';
+import { match } from 'ts-pattern';
+import * as z from 'zod';
 
 type Parsed = Awaited<ReturnType<typeof runAppParse>>;
 
 async function runAppParse(args?: readonly string[]) {
-	return await run(parser, {
+	const options = {
 		programName: 'exa',
 		brief: message`CLI for Exa search, contents, and answer.`,
-		help: 'both',
+		help: 'both' as const,
 		version,
-		completion: 'both',
+		completion: 'both' as const,
 		contexts: [envContext],
-		...(args === undefined ? {} : { args }),
-	});
+	};
+	if (args === undefined) {
+		return await run(parser, options);
+	}
+	return await run(parser, { ...options, args });
 }
 
 export async function runApp(args?: readonly string[]): Promise<void> {
@@ -39,20 +44,15 @@ export async function runApp(args?: readonly string[]): Promise<void> {
 }
 
 async function dispatch(parsed: Parsed): Promise<void> {
-	switch (parsed.command) {
-		case 'doctor':
-			runDoctor(parsed);
-			return;
-		case 'search':
-			await runSearch(parsed);
-			return;
-		case 'contents':
-			await runContents(parsed);
-			return;
-		case 'answer':
-			await runAnswer(parsed);
-			return;
-	}
+	await match(parsed)
+		.with({ command: 'doctor' }, (value) => {
+			runDoctor(value);
+			return Promise.resolve();
+		})
+		.with({ command: 'search' }, runSearch)
+		.with({ command: 'contents' }, runContents)
+		.with({ command: 'answer' }, runAnswer)
+		.exhaustive();
 }
 
 function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): void {
@@ -69,46 +69,103 @@ function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): void {
 
 async function runSearch(parsed: Extract<Parsed, { command: 'search' }>): Promise<void> {
 	const started = Date.now();
-	const body = searchBody(parsed);
+	if (parsed.request !== undefined) {
+		const body = zSearchBody.parse(parsed.request);
+		await runOperation({
+			parsed,
+			operation: 'search',
+			body,
+			started,
+			fetchBody: async (client) =>
+				parseJson(
+					JSON.stringify(
+						await search({
+							client,
+							// SAFETY: Optique already parsed this with zSearchBody. Hey API's
+							// SearchData['body'] optional keys diverge from Zod output under
+							// exactOptionalPropertyTypes.
+							body: body as SearchData['body'],
+						}),
+					),
+				),
+		});
+		return;
+	}
+	const body = flagSearchBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'search',
 		body,
 		started,
-		fetchBody: async (client) => {
-			const result = await search({ client, body });
-			return unwrap(result, 'search');
-		},
+		fetchBody: async (client) => parseJson(JSON.stringify(await search({ client, body }))),
 	});
 }
 
 async function runContents(parsed: Extract<Parsed, { command: 'contents' }>): Promise<void> {
 	const started = Date.now();
-	const body = contentsBody(parsed);
+	if (parsed.request !== undefined) {
+		const body = zGetContentsBody.parse(parsed.request);
+		await runOperation({
+			parsed,
+			operation: 'contents',
+			body,
+			started,
+			fetchBody: async (client) =>
+				parseJson(
+					JSON.stringify(
+						await getContents({
+							client,
+							// SAFETY: Optique already parsed this with zGetContentsBody. Hey API's
+							// GetContentsData['body'] optional keys diverge from Zod output under
+							// exactOptionalPropertyTypes.
+							body: body as GetContentsData['body'],
+						}),
+					),
+				),
+		});
+		return;
+	}
+	const body = flagContentsBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'contents',
 		body,
 		started,
-		fetchBody: async (client) => {
-			const result = await getContents({ client, body });
-			return unwrap(result, 'contents');
-		},
+		fetchBody: async (client) => parseJson(JSON.stringify(await getContents({ client, body }))),
 	});
 }
 
 async function runAnswer(parsed: Extract<Parsed, { command: 'answer' }>): Promise<void> {
 	const started = Date.now();
-	const body = answerBody(parsed);
+	if (parsed.request !== undefined) {
+		const body = zAnswerBody.parse(parsed.request);
+		await runOperation({
+			parsed,
+			operation: 'answer',
+			body,
+			started,
+			fetchBody: async (client) =>
+				parseJson(
+					JSON.stringify(
+						await answer({
+							client,
+							// SAFETY: Optique already parsed this with zAnswerBody. Hey API's
+							// AnswerData['body'] optional keys diverge from Zod output under
+							// exactOptionalPropertyTypes.
+							body: body as AnswerData['body'],
+						}),
+					),
+				),
+		});
+		return;
+	}
+	const body = flagAnswerBody(parsed);
 	await runOperation({
 		parsed,
 		operation: 'answer',
 		body,
 		started,
-		fetchBody: async (client) => {
-			const result = await answer({ client, body });
-			return unwrap(result, 'answer');
-		},
+		fetchBody: async (client) => parseJson(JSON.stringify(await answer({ client, body }))),
 	});
 }
 
@@ -129,9 +186,9 @@ type Globals = {
 async function runOperation(options: {
 	parsed: Globals;
 	operation: string;
-	body: unknown;
+	body: object;
 	started: number;
-	fetchBody: (client: ReturnType<typeof createExaClient>) => Promise<unknown>;
+	fetchBody: (client: ReturnType<typeof createExaClient>) => Promise<JsonValue>;
 }): Promise<void> {
 	const apiKey = requireApiKey(options.parsed.apiKey);
 	const apiUrl = options.parsed.apiUrl ?? 'https://api.exa.ai';
@@ -144,7 +201,7 @@ async function runOperation(options: {
 		const executed = await executeCached({
 			host,
 			operation: options.operation,
-			body: options.body,
+			body: parseJson(JSON.stringify(options.body)),
 			cache,
 			mode,
 			ttlSeconds,
@@ -157,6 +214,8 @@ async function runOperation(options: {
 			executed.ageMs,
 			options.started,
 		);
+	} catch (error) {
+		fail(`${options.operation} failed: ${errorMessageSchema.parse(error)}`);
 	} finally {
 		cache?.close();
 	}
@@ -164,7 +223,7 @@ async function runOperation(options: {
 
 function writeOutput(
 	parsed: Globals,
-	payload: unknown,
+	payload: JsonValue,
 	cacheHit: boolean,
 	ageMs: number | undefined,
 	started: number,
@@ -172,29 +231,23 @@ function writeOutput(
 	const stdoutIsTTY = process.stdout.isTTY ?? false;
 	const noColor = parsed.color === false;
 	const forceColor = parsed.color === true;
-	const mode = resolveMode({
+	const presenter = {
 		json: parsed.json,
 		pretty: parsed.pretty,
 		output: parsed.output,
 		stdoutIsTTY,
 		noColor,
 		forceColor,
-	});
-	const color = colorEnabled({
-		json: parsed.json,
-		pretty: parsed.pretty,
-		output: parsed.output,
-		stdoutIsTTY,
-		noColor,
-		forceColor,
-	});
+	};
+	const mode = resolveMode(presenter);
+	const color = colorEnabled(presenter);
 	const renderedPayload =
 		parsed.envelope && (mode === 'json' || mode === 'pretty')
-			? { data: payload, cache: { hit: cacheHit, ageMs } }
+			? { data: payload, cache: { hit: cacheHit, ageMs: ageMs ?? null } }
 			: payload;
 	const text = formatPayload(
-		renderedPayload,
-		mode === 'text' ? 'text' : mode,
+		parseJson(JSON.stringify(renderedPayload)),
+		mode,
 		color && mode === 'text',
 	);
 	if (parsed.output !== undefined) {
@@ -211,10 +264,7 @@ function writeOutput(
 	}
 }
 
-function searchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchData['body'] {
-	if (parsed.request !== undefined) {
-		return parseSearchBody(readJsonBody(parsed.request));
-	}
+function flagSearchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchData['body'] {
 	if (parsed.query === undefined) {
 		fail('search requires a query or --request.');
 	}
@@ -225,7 +275,7 @@ function searchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchData[
 	if (parsed.numResults !== undefined) {
 		body.numResults = parsed.numResults;
 	}
-	if (parsed.type !== undefined && isSearchType(parsed.type)) {
+	if (parsed.type !== undefined) {
 		body.type = parsed.type;
 	}
 	if (parsed.includeDomain.length > 0) {
@@ -234,10 +284,9 @@ function searchBody(parsed: Extract<Parsed, { command: 'search' }>): SearchData[
 	return body;
 }
 
-function contentsBody(parsed: Extract<Parsed, { command: 'contents' }>): GetContentsData['body'] {
-	if (parsed.request !== undefined) {
-		return parseContentsBody(readJsonBody(parsed.request));
-	}
+function flagContentsBody(
+	parsed: Extract<Parsed, { command: 'contents' }>,
+): GetContentsData['body'] {
 	if (parsed.urls.length === 0) {
 		fail('contents requires at least one URL or --request.');
 	}
@@ -251,10 +300,7 @@ function contentsBody(parsed: Extract<Parsed, { command: 'contents' }>): GetCont
 	return body;
 }
 
-function answerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerData['body'] {
-	if (parsed.request !== undefined) {
-		return parseAnswerBody(readJsonBody(parsed.request));
-	}
+function flagAnswerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerData['body'] {
 	if (parsed.query === undefined) {
 		fail('answer requires a query or --request.');
 	}
@@ -264,65 +310,6 @@ function answerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerData[
 	};
 }
 
-function isSearchType(value: string): value is NonNullable<SearchData['body']['type']> {
-	return (
-		value === 'neural' ||
-		value === 'fast' ||
-		value === 'auto' ||
-		value === 'deep' ||
-		value === 'deep-reasoning' ||
-		value === 'instant'
-	);
-}
-
-function parseSearchBody(value: unknown): SearchData['body'] {
-	const parsed = zSearchBody.safeParse(value);
-	if (!parsed.success) {
-		fail(`search --request is invalid: ${parsed.error.message}`);
-	}
-	const data: unknown = parsed.data;
-	if (!isSearchBody(data)) {
-		fail('search --request failed validation.');
-	}
-	return data;
-}
-
-function parseContentsBody(value: unknown): GetContentsData['body'] {
-	const parsed = zGetContentsBody.safeParse(value);
-	if (!parsed.success) {
-		fail(`contents --request is invalid: ${parsed.error.message}`);
-	}
-	const data: unknown = parsed.data;
-	if (!isContentsBody(data)) {
-		fail('contents --request failed validation.');
-	}
-	return data;
-}
-
-function parseAnswerBody(value: unknown): AnswerData['body'] {
-	const parsed = zAnswerBody.safeParse(value);
-	if (!parsed.success) {
-		fail(`answer --request is invalid: ${parsed.error.message}`);
-	}
-	const data: unknown = parsed.data;
-	if (!isAnswerBody(data)) {
-		fail('answer --request failed validation.');
-	}
-	return data;
-}
-
-function isSearchBody(value: unknown): value is SearchData['body'] {
-	return zSearchBody.safeParse(value).success;
-}
-
-function isContentsBody(value: unknown): value is GetContentsData['body'] {
-	return zGetContentsBody.safeParse(value).success;
-}
-
-function isAnswerBody(value: unknown): value is AnswerData['body'] {
-	return zAnswerBody.safeParse(value).success;
-}
-
 function requireApiKey(apiKey: string | undefined): string {
 	if (apiKey === undefined || apiKey === '') {
 		fail('Missing API key. Set EXA_API_KEY or pass --api-key.');
@@ -330,25 +317,11 @@ function requireApiKey(apiKey: string | undefined): string {
 	return apiKey;
 }
 
-function unwrap(result: { data: unknown; error: unknown }, operation: string): unknown {
-	if (result.error !== undefined) {
-		fail(`${operation} failed: ${formatError(result.error)}`);
-	}
-	if (result.data === undefined) {
-		fail(`${operation} returned an empty body.`);
-	}
-	return result.data;
-}
-
-function formatError(error: unknown): string {
-	if (typeof error === 'string') {
-		return error;
-	}
-	if (error instanceof Error) {
-		return error.message;
-	}
-	return JSON.stringify(error);
-}
+const errorMessageSchema = z.union([
+	z.string().trim(),
+	z.instanceof(Error).transform((error) => error.message),
+	z.json().transform((value) => JSON.stringify(value)),
+]);
 
 function fail(messageText: string): never {
 	process.stderr.write(`${messageText}\n`);

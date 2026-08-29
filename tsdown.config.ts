@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
@@ -6,9 +7,21 @@ export default defineConfig({
 	},
 	format: 'esm',
 	platform: 'node',
-	target: 'node24',
+	target: 'node26',
+	deps: {
+		neverBundle: [/^bun:/],
+	},
 	sourcemap: true,
-	clean: true,
+	clean: false,
 	hash: false,
-	dts: true,
+	dts: {
+		tsconfig: 'tsconfig.build.json',
+	},
+	hooks: {
+		'build:prepare': () => {
+			rmSync('dist/cli.mjs', { force: true });
+			rmSync('dist/cli.mjs.map', { force: true });
+			rmSync('dist/cli.d.mts', { force: true });
+		},
+	},
 });

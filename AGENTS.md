@@ -6,14 +6,15 @@ Public Exa CLI. This is not the infer-lab aggregator.
 
 | Path | Role |
 |:--|:--|
-| `src/cli.ts` | Process entry |
-| `src/parser.ts` | Optique grammar |
+| `src/cli.ts` | Process entry (`import "zod/compile"` first) |
+| `src/parser.ts` | Optique grammar. `--request` is `zod(generated body schema)` |
+| `src/env.ts` | Typed process env (`z.output`) |
 | `src/app.ts` | Command dispatch, I/O |
 | `src/cache/` | `bun:sqlite` request cache |
 | `src/http/` | Hey API client wrapper |
 | `src/output/` | stdout/stderr presenter |
 | `src/generated/` | OpenAPI output — regenerate, do not edit |
-| `mise-tasks/` | Bun file tasks (`schema`, `schema:check`, `compile`, `version-guard`, `release:binaries`) |
+| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release:binaries`) |
 | `vendor/exa-openapi.yaml` | SHA-pinned Exa spec |
 | `skills/exa/` | skills.sh skill |
 
@@ -23,9 +24,11 @@ Public Exa CLI. This is not the infer-lab aggregator.
 - Cache defaults on. `--refresh` skips reads. `--no-cache` skips reads and writes. Key is SHA-256 of canonical `{ host, operation, body }`.
 - Stdout is the payload. Stderr is progress, errors, cache hits, and “wrote file.” `--json` is the provider body unless `--envelope`.
 - `EXA_API_KEY` or `--api-key`. CLI flag wins. Do not print the key.
-- TypeScript 5.9 is required for `@hey-api/openapi-ts` 0.99 (TypeScript 7’s JS compiler API does not export `SyntaxKind`). `tsc` is 5.9 until Hey API supports TypeScript 7.
-- Generated files are stamped with `// @ts-nocheck` after each `mise run schema` because Hey API output does not satisfy `exactOptionalPropertyTypes`.
-- Provider JSON is validated with the generated Zod schemas in `src/generated/zod.gen.ts`. Do not re-declare response shapes with `as { … }`.
+- `--request` is JSON text for that command’s generated body schema (`zSearchBody` / `zGetContentsBody` / `zAnswerBody`). Optique `@optique/zod` parses it. Hey API’s SDK `validator: true` is the HTTP boundary on the same schemas. There is no Hey API ↔ Optique plugin; the generated Zod is the shared contract.
+- `import "zod/compile"` (and bunfig `preload`) AOT-compiles schemas on first parse for speed. It does not shrink the binary. `z.coerce` flag parsers stay on the runtime path.
+- TypeScript 7 (`typescript@7.0.2`) and Node 26. `tsc` is the native TS 7 binary. Pin `@hey-api/openapi-ts` to the `@next` snapshot (`0.0.0-next-20260824173136`) until stable ships the TypeScript-compiler-API removal. Do not use `0.99.0` — it reads `ts.SyntaxKind` from the package root, which TypeScript 7 does not export.
+- Generated files get `// @ts-nocheck` via `output.header`. The client uses Hey API `auth()` for `x-api-key`, `throwOnError: true`, and SDK `responseStyle: 'data'`. Do not unwrap `{ data, error }` envelopes or stamp generated files after the fact.
+- Do not re-declare request or response shapes in `app.ts`. Flag bodies are Optique-typed fields. `--request` is the generated Zod body. Live tests may `safeParse` CLI stdout as a test of our JSON output.
 
 ## Tasks
 
@@ -59,21 +62,23 @@ mise env --json | jq 'keys'
 
 ## Release discipline
 
-Versioning is changeset-driven after a one-time `0.0.0` bootstrap.
+Versioning is changeset-driven. npm is gated until `@victor-software-house/anti-slop` is on npm. `rg TODO(publish-gate)` is the re-enable checklist. Do not delete Changesets, OIDC, or `mise run release`.
 
-1. First published version is **`0.0.0`**, shipped by the initial commit with **no** changeset file. Operator publishes it once (`npm publish --access public`), tags `v0.0.0`, and configures npm trusted publishing for `.github/workflows/release.yml`.
-2. Later functional PRs add a `.changeset/*.md` file. Default bump is `patch` (`0.0.1` is the first changeset-driven release).
-3. `changesets/action` opens a **Version Packages** PR. Operator merges it → CI publishes via OIDC and uploads compiled binaries to the GitHub Release.
+Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. That job stays after npm unlock. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes.
+
+1. First npm version is **`0.0.0`**, after the publish gate. Then later functional PRs add a `.changeset/*.md` file. Default bump is `patch`.
+2. `changesets/action` opens a **Version Packages** PR. Operator merges it → CI publishes via OIDC. Versioned GitHub Releases get the same six archives.
 
 - Never run `changeset version` or `changeset publish` locally.
 - Never hand-edit versions in `package.json` or `CHANGELOG.md` after the `0.0.0` scaffold.
 - `minor` only for notable new surface. Never `major` on `0.x` unless explicitly decided.
 - No `NPM_TOKEN` in workflows.
-- Runners are GitHub-hosted `ubuntu-24.04`, not Namespace.
+- Runners are GitHub-hosted `ubuntu-24.04`, not Namespace. No macOS/Windows runner matrix.
 
 ## Conventions
 
 - Conventional Commits; no AI attribution trailers
 - No `../` imports in `src/` or `test/` — use `@cli/*` and `@test/*`
 - Tabs, single quotes, 100-col (Biome)
+- `tsconfig.json` typechecks src, tests, mise-tasks, and root configs. `tsconfig.build.json` is src-only for tsdown dts. Vendored oxlint plugins stay out of both.
 - Skills live in `skills/exa/`

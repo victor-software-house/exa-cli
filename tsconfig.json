@@ -2,7 +2,7 @@
 	"compilerOptions": {
 		"target": "ES2024",
 		"lib": ["ES2024"],
-		"types": ["@types/bun"],
+		"types": ["node", "@types/bun"],
 		"module": "ESNext",
 		"moduleResolution": "bundler",
 		"strict": true,
@@ -13,6 +13,7 @@
 		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
+		"erasableSyntaxOnly": true,
 		"noUncheckedIndexedAccess": true,
 		"exactOptionalPropertyTypes": true,
 		"noPropertyAccessFromIndexSignature": true,
@@ -31,5 +32,12 @@
 			"@pkg": ["./package.json"]
 		}
 	},
+	"include": [
+		"src/**/*.ts",
+		"test/**/*.ts",
+		"mise-tasks/**/*.ts",
+		".changeset/**/*.ts",
+		"*.config.ts"
+	],
 	"exclude": ["node_modules", "dist"]
 }

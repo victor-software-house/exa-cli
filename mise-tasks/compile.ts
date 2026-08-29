@@ -1,32 +1,70 @@
 #!/usr/bin/env bun
-//MISE description="Cross-compile standalone binaries"
+//MISE description="Cross-compile standalone binaries into mise-autodetectable archives"
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { $ } from 'bun';
 
 const targets = [
-	'bun-darwin-arm64',
-	'bun-darwin-x64',
-	'bun-linux-x64',
-	'bun-linux-arm64',
-	'bun-linux-x64-musl',
-	'bun-windows-x64',
+	{ bunTarget: 'bun-darwin-arm64', platform: 'darwin-arm64', kind: 'tar' },
+	{ bunTarget: 'bun-darwin-x64', platform: 'darwin-x64', kind: 'tar' },
+	{ bunTarget: 'bun-linux-x64', platform: 'linux-x64', kind: 'tar' },
+	{ bunTarget: 'bun-linux-arm64', platform: 'linux-arm64', kind: 'tar' },
+	{ bunTarget: 'bun-linux-x64-musl', platform: 'linux-x64-musl', kind: 'tar' },
+	{ bunTarget: 'bun-windows-x64', platform: 'windows-x64', kind: 'zip' },
 ] as const;
 
-const outDir = 'dist/binaries';
-mkdirSync(outDir, { recursive: true });
+export const archiveNames = [
+	'exa-darwin-arm64.tar.gz',
+	'exa-darwin-x64.tar.gz',
+	'exa-linux-x64.tar.gz',
+	'exa-linux-arm64.tar.gz',
+	'exa-linux-x64-musl.tar.gz',
+	'exa-windows-x64.exe.zip',
+	'SHA256SUMS',
+] as const;
 
-const checksums: string[] = [];
+export async function compileArchives(): Promise<void> {
+	const outDir = 'dist/binaries';
+	rmSync(outDir, { recursive: true, force: true });
+	mkdirSync(outDir, { recursive: true });
 
-for (const target of targets) {
-	const ext = target.includes('windows') ? '.exe' : '';
-	const outfile = join(outDir, `exa-${target}${ext}`);
-	await $`bun build --compile --target=${target} --outfile=${outfile} src/cli.ts`;
-	const bytes = await Bun.file(outfile).arrayBuffer();
-	const digest = createHash('sha256').update(Buffer.from(bytes)).digest('hex');
-	checksums.push(`${digest}  ${outfile.replace(`${outDir}/`, '')}`);
+	const checksums: string[] = [];
+
+	for (const target of targets) {
+		const workDir = join(outDir, `.work-${target.platform}`);
+		mkdirSync(workDir, { recursive: true });
+		const binaryName = target.kind === 'zip' ? 'exa.exe' : 'exa';
+		const compiled = join(workDir, binaryName);
+		await $`bun build --compile --target=${target.bunTarget} --outfile=${compiled} src/cli.ts`;
+
+		const archiveName =
+			target.kind === 'zip' ? `exa-${target.platform}.exe.zip` : `exa-${target.platform}.tar.gz`;
+		const archivePath = join(outDir, archiveName);
+		if (target.kind === 'zip') {
+			await $`zip -j -q ${archivePath} ${compiled}`;
+		} else {
+			await $`tar -C ${workDir} -czf ${archivePath} ${binaryName}`;
+		}
+		rmSync(workDir, { recursive: true, force: true });
+
+		const digest = createHash('sha256')
+			.update(Buffer.from(await Bun.file(archivePath).arrayBuffer()))
+			.digest('hex');
+		checksums.push(`${digest}  ${archiveName}`);
+	}
+
+	writeFileSync(join(outDir, 'SHA256SUMS'), `${checksums.join('\n')}\n`);
+
+	for (const name of archiveNames) {
+		const path = join(outDir, name);
+		if (!(await Bun.file(path).exists())) {
+			throw new Error(`compile did not produce ${path}`);
+		}
+	}
 }
 
-writeFileSync(join(outDir, 'SHA256SUMS'), `${checksums.join('\n')}\n`);
+if (import.meta.main) {
+	await compileArchives();
+}

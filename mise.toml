@@ -4,9 +4,9 @@ min_version = "2026.7.7"
 fnox-export = "https://github.com/victor-software-house/fnox-export.git"
 
 [tools]
-node = "24.20.0"
+node = "26.8.1"
 bun = "1.4.0"
-lefthook = "latest"
+lefthook = "2.1.10"
 
 [settings]
 experimental = true
@@ -70,7 +70,7 @@ run = "bun test test/live"
 
 [tasks.build]
 description = "Build CLI bundle with tsdown"
-sources = ["src/**/*.ts"]
+sources = ["src/**/*.ts", "tsdown.config.ts"]
 outputs = ["dist/**"]
 run = "tsdown"
 
@@ -93,6 +93,10 @@ run = "changeset version"
 [tasks.release]
 description = "Publish to public npm via Changesets"
 run = "changeset publish"
+
+[tasks.schema]
+description = "Regenerate src/generated from the pinned Exa OpenAPI spec"
+run = "openapi-ts"
 
 [tasks."lockfile:sync"]
 description = "Verify bun.lock matches package.json"

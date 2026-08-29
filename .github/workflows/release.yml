@@ -20,6 +20,37 @@ env:
   MISE_IGNORED_CONFIG_PATHS: ~/.config/mise/config.toml
 
 jobs:
+  binaries:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: false
+          cache: true
+
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install mise tools
+        run: mise install --locked
+
+      - name: Verify repository
+        run: mise run verify
+
+      - name: Compile binaries
+        run: mise run compile
+
+      - name: Upload rolling v0.0.0 binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: mise run release:binaries
+
   changesets:
     runs-on: ubuntu-24.04
     permissions:
@@ -48,7 +79,9 @@ jobs:
       - name: Pack dry-run
         run: mise run pack
 
+      # TODO(publish-gate): blocked until @victor-software-house/anti-slop is on npm. Re-enable; do not delete.
       - name: Create release PR or publish
+        if: false
         id: changesets
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:

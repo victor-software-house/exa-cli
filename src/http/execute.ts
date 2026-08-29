@@ -1,11 +1,12 @@
 import { cacheKey } from '@cli/cache/key';
 import type { CacheStore } from '@cli/cache/store';
-import { parseJson } from '@cli/json';
+import { type JsonValue, parseJson } from '@cli/json';
+import { match } from 'ts-pattern';
 
 export type CacheMode = 'default' | 'refresh' | 'off';
 
 export type ExecuteResult = {
-	payload: unknown;
+	payload: JsonValue;
 	cacheHit: boolean;
 	ageMs: number | undefined;
 };
@@ -13,11 +14,11 @@ export type ExecuteResult = {
 export async function executeCached(options: {
 	host: string;
 	operation: string;
-	body: unknown;
+	body: JsonValue;
 	cache: CacheStore | undefined;
 	mode: CacheMode;
 	ttlSeconds: number;
-	fetchBody: () => Promise<unknown>;
+	fetchBody: () => Promise<JsonValue>;
 }): Promise<ExecuteResult> {
 	const key = cacheKey({
 		host: options.host,
@@ -45,11 +46,9 @@ export async function executeCached(options: {
 }
 
 export function cacheMode(flags: { refresh: boolean; noCache: boolean }): CacheMode {
-	if (flags.noCache) {
-		return 'off';
-	}
-	if (flags.refresh) {
-		return 'refresh';
-	}
-	return 'default';
+	return match(flags)
+		.returnType<CacheMode>()
+		.with({ noCache: true }, () => 'off')
+		.with({ refresh: true }, () => 'refresh')
+		.otherwise(() => 'default');
 }

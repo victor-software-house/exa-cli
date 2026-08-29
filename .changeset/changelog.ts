@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { getInfo } from '@changesets/get-github-info';
 import type {
 	ChangelogFunctions,
-	ModCompWithPackage,
-	NewChangesetWithCommit,
-	VersionType,
+	GetDependencyReleaseLine,
+	GetReleaseLine,
 } from '@changesets/types';
 import { Liquid } from 'liquidjs';
+import { match, P } from 'ts-pattern';
 
 type PullRequest = {
 	number: number;
@@ -41,6 +41,11 @@ type ReleaseTemplateData = {
 	summaryHasTerminal: boolean;
 };
 
+type DependencyTemplateData = {
+	readonly name: string;
+	readonly newVersion: string;
+};
+
 const releaseTemplatePath = fileURLToPath(new URL('./changelog.liquid', import.meta.url));
 const dependencyTemplatePath = fileURLToPath(
 	new URL('./dependency-changelog.liquid', import.meta.url),
@@ -59,59 +64,39 @@ const dependencyTemplate = liquid.parse(
 	dependencyTemplatePath,
 );
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null;
-}
-
-function getChangelogOptions(value: unknown): ChangelogOptions {
-	if (!isRecord(value)) return {};
-
-	const internalAuthors = value['internalAuthors'];
-	const repo = value['repo'];
-	const options: ChangelogOptions = {};
-
-	if (
-		Array.isArray(internalAuthors) &&
-		internalAuthors.every((author) => typeof author === 'string')
-	) {
-		options.internalAuthors = internalAuthors;
-	}
-	if (typeof repo === 'string') {
-		options.repo = repo;
-	}
-
-	return options;
+function parseChangelogOptions(options: ChangelogOptions | null | undefined): ChangelogOptions {
+	return match(options)
+		.returnType<ChangelogOptions>()
+		.with(P.nullish, () => ({}))
+		.with({ repo: P.string, internalAuthors: P.array(P.string) }, (value) => ({
+			repo: value.repo,
+			internalAuthors: value.internalAuthors,
+		}))
+		.with({ repo: P.string }, (value) => ({ repo: value.repo }))
+		.with({ internalAuthors: P.array(P.string) }, (value) => ({
+			internalAuthors: value.internalAuthors,
+		}))
+		.otherwise(() => ({}));
 }
 
 function markdownLinkUrl(markdown: string): string {
 	return markdown.match(/\]\((.+)\)$/)?.[1] ?? '';
 }
 
-// Liquid types renderSync as `any`; narrow once here instead of at each call site.
-function renderTemplate(
-	template: ReturnType<Liquid['parse']>,
-	scope: Record<string, unknown>,
-): string {
-	const rendered: unknown = liquid.renderSync(template, scope);
-	return typeof rendered === 'string' ? rendered : '';
-}
-
 function renderReleaseTemplate(release: ReleaseTemplateData): string {
-	return renderTemplate(releaseTemplate, { release });
+	return match(liquid.renderSync(releaseTemplate, { release }))
+		.with(P.string, (text) => text)
+		.otherwise(() => '');
 }
 
-function renderDependencyTemplate(
-	dependencies: Pick<ModCompWithPackage, 'name' | 'newVersion'>[],
-): string {
-	return renderTemplate(dependencyTemplate, { dependencies });
+function renderDependencyTemplate(dependencies: readonly DependencyTemplateData[]): string {
+	return match(liquid.renderSync(dependencyTemplate, { dependencies }))
+		.with(P.string, (text) => text)
+		.otherwise(() => '');
 }
 
-export async function getReleaseLine(
-	changeset: NewChangesetWithCommit,
-	_type: VersionType,
-	options: unknown,
-): Promise<string> {
-	const { internalAuthors = [], repo } = getChangelogOptions(options);
+export const getReleaseLine: GetReleaseLine = async (changeset, _type, changelogOpts) => {
+	const { internalAuthors = [], repo } = parseChangelogOptions(changelogOpts);
 	const [firstLine = '', ...remaining] = changeset.summary
 		.split('\n')
 		.map((line) => line.trimEnd());
@@ -163,23 +148,26 @@ export async function getReleaseLine(
 		// introduces the bullet list that follows, and appending '.' yields ':.'.
 		summaryHasTerminal: /[.!?:;]$/.test(firstLine),
 	});
-}
+};
 
-export async function getDependencyReleaseLine(
-	_changesets: NewChangesetWithCommit[],
-	dependenciesUpdated: ModCompWithPackage[],
-	_options: unknown,
-): Promise<string> {
+export const getDependencyReleaseLine: GetDependencyReleaseLine = async (
+	_changesets,
+	dependenciesUpdated,
+	_changelogOpts,
+) => {
 	if (dependenciesUpdated.length === 0) return '';
 
-	return renderDependencyTemplate(dependenciesUpdated);
-}
+	return renderDependencyTemplate(
+		dependenciesUpdated.map((dependency) => ({
+			name: dependency.name,
+			newVersion: dependency.newVersion,
+		})),
+	);
+};
 
 const changelogFunctions: ChangelogFunctions = {
 	getReleaseLine,
 	getDependencyReleaseLine,
 };
 
-// Changesets resolves the adapter through its default export.
-// oxlint-disable-next-line import/no-default-export
 export default changelogFunctions;

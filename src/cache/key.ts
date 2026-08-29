@@ -1,20 +1,25 @@
 import { createHash } from 'node:crypto';
+import { isJsonObject, type JsonValue } from '@cli/json';
 
 export type CacheIdentity = {
 	host: string;
 	operation: string;
-	body: unknown;
+	body: JsonValue;
 };
 
-export function canonicalize(value: unknown): unknown {
+export function canonicalize(value: JsonValue): JsonValue {
 	if (Array.isArray(value)) {
 		return value.map((item) => canonicalize(item));
 	}
-	if (isRecord(value)) {
-		const sorted: Record<string, unknown> = {};
-		for (const key of Object.keys(value).toSorted()) {
-			sorted[key] = canonicalize(value[key]);
-		}
+	if (isJsonObject(value)) {
+		const sorted = Object.fromEntries(
+			Object.keys(value)
+				.toSorted()
+				.flatMap((key) => {
+					const item = value[key];
+					return item === undefined ? [] : [[key, canonicalize(item)]];
+				}),
+		);
 		return sorted;
 	}
 	return value;
@@ -27,8 +32,4 @@ export function cacheKey(identity: CacheIdentity): string {
 		body: identity.body,
 	});
 	return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

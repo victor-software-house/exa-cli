@@ -1,4 +1,9 @@
+import { env } from '@cli/env';
+import type { JsonObject, JsonValue } from '@cli/json';
+import { isJsonObject } from '@cli/json';
 import { createColors } from 'picocolors';
+import { match } from 'ts-pattern';
+import * as z from 'zod';
 
 export type OutputMode = 'json' | 'pretty' | 'text';
 
@@ -12,33 +17,35 @@ export type PresenterOptions = {
 };
 
 export function resolveMode(options: PresenterOptions): OutputMode {
-	if (options.json || options.output?.endsWith('.json') === true || !options.stdoutIsTTY) {
-		return 'json';
-	}
-	if (options.pretty) {
-		return 'pretty';
-	}
-	return 'text';
+	return match(options)
+		.returnType<OutputMode>()
+		.when(
+			(value) => value.json || value.output?.endsWith('.json') === true || !value.stdoutIsTTY,
+			() => 'json',
+		)
+		.when(
+			(value) => value.pretty,
+			() => 'pretty',
+		)
+		.otherwise(() => 'text');
 }
 
 export function colorEnabled(options: PresenterOptions): boolean {
-	if (options.noColor || process.env['NO_COLOR'] !== undefined) {
+	if (options.noColor || env.NO_COLOR !== undefined) {
 		return false;
 	}
-	if (options.forceColor || process.env['FORCE_COLOR'] !== undefined) {
+	if (options.forceColor || env.FORCE_COLOR !== undefined) {
 		return true;
 	}
 	return options.stdoutIsTTY;
 }
 
-export function formatPayload(payload: unknown, mode: OutputMode, color: boolean): string {
-	if (mode === 'json') {
-		return `${JSON.stringify(payload)}\n`;
-	}
-	if (mode === 'pretty') {
-		return `${JSON.stringify(payload, null, 2)}\n`;
-	}
-	return `${formatText(payload, color)}\n`;
+export function formatPayload(payload: JsonValue, mode: OutputMode, color: boolean): string {
+	return match(mode)
+		.with('json', () => `${JSON.stringify(payload)}\n`)
+		.with('pretty', () => `${JSON.stringify(payload, null, 2)}\n`)
+		.with('text', () => `${formatText(payload, color)}\n`)
+		.exhaustive();
 }
 
 export function formatCacheHit(ageMs: number): string {
@@ -66,59 +73,68 @@ function formatAge(ageMs: number): string {
 	return `${hours}h`;
 }
 
-function formatText(payload: unknown, color: boolean): string {
+function formatText(payload: JsonValue, color: boolean): string {
 	const pc = createColors(color);
-	if (!isRecord(payload)) {
+	if (!isJsonObject(payload)) {
 		return JSON.stringify(payload, null, 2);
 	}
-	if (typeof payload['answer'] === 'string' || Array.isArray(payload['citations'])) {
-		return formatAnswer(payload, pc);
-	}
-	if (Array.isArray(payload['results'])) {
-		return formatResults(payload['results'], pc);
-	}
-	return JSON.stringify(payload, null, 2);
+	return match(payload)
+		.when(
+			(value) => isStringField(value['answer']) || Array.isArray(value['citations']),
+			(value) => formatAnswer(value, pc),
+		)
+		.when(
+			(value) => Array.isArray(value['results']),
+			(value) => formatResults(asJsonArray(value['results']), pc),
+		)
+		.otherwise((value) => JSON.stringify(value, null, 2));
 }
 
-function formatResults(results: unknown[], pc: ReturnType<typeof createColors>): string {
+function formatResults(results: JsonValue[], pc: ReturnType<typeof createColors>): string {
 	const lines: string[] = [];
 	for (const result of results) {
-		if (!isRecord(result)) {
+		if (!isJsonObject(result)) {
 			continue;
 		}
-		const url = typeof result['url'] === 'string' ? result['url'] : undefined;
-		const title = typeof result['title'] === 'string' ? result['title'] : undefined;
-		if (url !== undefined) {
+		const url = result['url'];
+		if (isStringField(url)) {
 			lines.push(pc.underline(url));
 		}
-		if (title !== undefined) {
+		const title = result['title'];
+		if (isStringField(title)) {
 			lines.push(`  ${pc.bold(title)}`);
 		}
 	}
 	return lines.join('\n');
 }
 
-function formatAnswer(
-	payload: Record<string, unknown>,
-	pc: ReturnType<typeof createColors>,
-): string {
+function formatAnswer(payload: JsonObject, pc: ReturnType<typeof createColors>): string {
 	const lines: string[] = [];
 	const answer = payload['answer'];
-	if (typeof answer === 'string') {
+	if (isStringField(answer)) {
 		lines.push(answer);
-	} else if (answer !== undefined) {
+	} else if (answer !== undefined && answer !== null) {
 		lines.push(JSON.stringify(answer, null, 2));
 	}
-	if (Array.isArray(payload['citations'])) {
-		for (const citation of payload['citations']) {
-			if (isRecord(citation) && typeof citation['url'] === 'string') {
-				lines.push(pc.underline(citation['url']));
+	const citations = payload['citations'];
+	if (Array.isArray(citations)) {
+		for (const citation of citations) {
+			if (!isJsonObject(citation)) {
+				continue;
+			}
+			const url = citation['url'];
+			if (isStringField(url)) {
+				lines.push(pc.underline(url));
 			}
 		}
 	}
 	return lines.join('\n');
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
+function isStringField(value: JsonValue | undefined): value is string {
+	return z.string().trim().safeParse(value).success;
+}
+
+function asJsonArray(value: JsonValue | undefined): JsonValue[] {
+	return Array.isArray(value) ? value : [];
 }

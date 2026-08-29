@@ -3,7 +3,10 @@
 	"version": "0.0.0",
 	"description": "Public CLI for Exa search, contents, and answer with a local SQLite cache.",
 	"license": "MIT",
-	"author": "Victor Araújo and Victor Software House <victor@victor-software-house.com>",
+	"author": {
+		"name": "Victor Araújo",
+		"email": "victor@victor-software-house.com"
+	},
 	"type": "module",
 	"bin": {
 		"exa": "./dist/cli.mjs"
@@ -26,13 +29,13 @@
 		"prepublishOnly": "mise run verify"
 	},
 	"engines": {
-		"node": ">=24"
+		"node": ">=26"
 	},
 	"packageManager": "bun@1.4.0",
 	"devEngines": {
 		"runtime": {
-			"name": "bun",
-			"version": ">=1.4.0 <2.0.0"
+			"name": "node",
+			"version": ">=26"
 		},
 		"packageManager": {
 			"name": "bun",
@@ -64,6 +67,7 @@
 		"@optique/run": "1.2.4",
 		"@optique/zod": "1.2.4",
 		"picocolors": "1.1.1",
+		"ts-pattern": "5.9.0",
 		"zod": "4.5.2"
 	},
 	"devDependencies": {
@@ -73,14 +77,16 @@
 		"@changesets/types": "6.1.0",
 		"@commitlint/cli": "21.2.2",
 		"@commitlint/config-conventional": "21.2.2",
-		"@hey-api/openapi-ts": "0.99.0",
+		"@hey-api/openapi-ts": "0.0.0-next-20260824173136",
 		"@limegrass/eslint-plugin-import-alias": "1.6.1",
+		"@oxlint/plugins": "1.80.0",
 		"@types/bun": "1.4.0",
+		"@types/node": "26.4.0",
 		"eslint-plugin-zod": "4.10.0",
 		"liquidjs": "10.27.2",
 		"oxlint": "1.80.0",
 		"oxlint-tsgolint": "7.0.2001",
 		"tsdown": "0.22.14",
-		"typescript": "5.9.3"
+		"typescript": "7.0.2"
 	}
 }

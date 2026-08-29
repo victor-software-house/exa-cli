@@ -4,13 +4,26 @@ Public CLI for [Exa](https://exa.ai/) search, contents, and answer.
 
 ## Install
 
-```bash
-npm install -g @victor-software-house/exa-cli
-# or
-npx @victor-software-house/exa-cli --help
+Agents and local checkouts install the GitHub Release binary through mise. Pin `0.0.0` — that tag is a rolling channel, not a frozen npm version:
+
+```toml
+[tools]
+"github:victor-software-house/exa-cli" = "0.0.0"
 ```
 
-The binary name is `exa`. That can collide with the old `exa` / `eza` ls replacement. Prefer `npx` / `bunx` when both are on `PATH`.
+```bash
+mise install
+exa --help
+```
+
+npm is not the install path until the package is published. Do not `npm i -g`. Source checkout:
+
+```bash
+mise install
+bun src/cli.ts --help
+```
+
+The binary name is `exa`. That can collide with the old `exa` / `eza` ls replacement.
 
 ## Auth
 

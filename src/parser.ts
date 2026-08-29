@@ -1,7 +1,10 @@
+import { zAnswerBody, zGetContentsBody, zSearchBody } from '@cli/generated/zod.gen';
+import { parseJson } from '@cli/json';
 import { object, or } from '@optique/core/constructs';
 import { message } from '@optique/core/message';
 import { multiple, optional, withDefault } from '@optique/core/modifiers';
 import { argument, command, constant, flag, negatableFlag, option } from '@optique/core/primitives';
+import { choice } from '@optique/core/valueparser';
 import { bindEnv, createEnvContext } from '@optique/env';
 import { path } from '@optique/run/valueparser';
 import { zod } from '@optique/zod';
@@ -18,9 +21,19 @@ const countSchema = z.coerce
 	.positive({ error: 'Expected a positive number.' })
 	.meta({ description: 'Positive count' });
 
-const searchTypeSchema = z
-	.enum(['neural', 'fast', 'auto', 'deep', 'deep-reasoning', 'instant'])
-	.meta({ description: 'Exa search type' });
+function jsonBody(schema: z.ZodType) {
+	return z
+		.string()
+		.trim()
+		.transform((raw, ctx) => {
+			try {
+				return schema.parse(parseJson(raw));
+			} catch {
+				ctx.addIssue({ code: 'custom', message: 'Expected JSON.' });
+				return z.NEVER;
+			}
+		});
+}
 
 export const envContext = createEnvContext();
 
@@ -111,9 +124,16 @@ const searchCommand = command(
 			}),
 		),
 		request: optional(
-			option('--request', path({ type: 'file', mustExist: true, metavar: 'FILE' }), {
-				description: message`Raw JSON request body.`,
-			}),
+			option(
+				'--request',
+				zod(jsonBody(zSearchBody), {
+					metavar: 'JSON',
+					placeholder: zSearchBody.parse({ query: 'query' }),
+				}),
+				{
+					description: message`JSON search body for /search.`,
+				},
+			),
 		),
 		numResults: optional(
 			option('-n', '--num-results', zod(countSchema, { placeholder: 10 }), {
@@ -121,7 +141,7 @@ const searchCommand = command(
 			}),
 		),
 		type: optional(
-			option('--type', zod(searchTypeSchema, { placeholder: 'auto' }), {
+			option('--type', choice(['neural', 'fast', 'auto', 'deep', 'deep-reasoning', 'instant']), {
 				description: message`Search type.`,
 			}),
 		),
@@ -144,9 +164,16 @@ const contentsCommand = command(
 			}),
 		),
 		request: optional(
-			option('--request', path({ type: 'file', mustExist: true, metavar: 'FILE' }), {
-				description: message`Raw JSON request body.`,
-			}),
+			option(
+				'--request',
+				zod(jsonBody(zGetContentsBody), {
+					metavar: 'JSON',
+					placeholder: zGetContentsBody.parse({ urls: ['https://exa.ai'] }),
+				}),
+				{
+					description: message`JSON contents body for /contents.`,
+				},
+			),
 		),
 		maxAgeHours: optional(
 			option('--max-age-hours', zod(countSchema, { placeholder: 24 }), {
@@ -167,9 +194,16 @@ const answerCommand = command(
 			}),
 		),
 		request: optional(
-			option('--request', path({ type: 'file', mustExist: true, metavar: 'FILE' }), {
-				description: message`Raw JSON request body.`,
-			}),
+			option(
+				'--request',
+				zod(jsonBody(zAnswerBody), {
+					metavar: 'JSON',
+					placeholder: zAnswerBody.parse({ query: 'query' }),
+				}),
+				{
+					description: message`JSON answer body for /answer.`,
+				},
+			),
 		),
 		text: withDefault(
 			flag('--text', { description: message`Include full text on citations.` }),

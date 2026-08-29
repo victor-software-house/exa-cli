@@ -5,13 +5,11 @@ description: Use the Exa CLI for live web search, known-page contents, and cited
 
 # Exa CLI
 
-Install from GitHub:
+Install the GitHub Release binary with mise (`"github:victor-software-house/exa-cli" = "0.0.0"`). The CLI binary is `exa`.
 
 ```bash
 npx skills add victor-software-house/exa-cli
 ```
-
-The CLI binary is `exa` (`npx @victor-software-house/exa-cli` if `exa` collides with another tool).
 
 Auth is `EXA_API_KEY` or `--api-key`. Do not print the key.
 
@@ -41,10 +39,10 @@ Cited synthesis:
 exa answer "narrow question" --json
 ```
 
-Raw body:
+Raw body is JSON for that command’s generated Hey API schema. Optique parses it; do not pass a file path:
 
 ```bash
-exa search --request request.json --json
+exa search --request '{"query":"Exa search type auto","contents":{"highlights":true}}' --json
 ```
 
 Do not treat snippets, citations, or generated answers as proof. Read the cited URL before making a factual claim.

@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { env } from '@cli/env';
 
 export const DEFAULT_TTL_SECONDS = 24 * 60 * 60;
 
@@ -12,9 +13,8 @@ export type CacheEntry = {
 };
 
 export function defaultCacheDir(): string {
-	const xdg = process.env['XDG_CACHE_HOME'];
-	if (xdg !== undefined && xdg !== '') {
-		return join(xdg, 'exa-cli');
+	if (env.XDG_CACHE_HOME !== undefined) {
+		return join(env.XDG_CACHE_HOME, 'exa-cli');
 	}
 	return join(homedir(), '.cache', 'exa-cli');
 }

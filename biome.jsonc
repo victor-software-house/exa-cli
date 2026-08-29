@@ -100,7 +100,13 @@
 			}
 		},
 		{
-			"includes": ["mise-tasks/**", "openapi-ts.config.ts", "tsdown.config.ts", ".changeset/**"],
+			"includes": [
+				"mise-tasks/**",
+				"openapi-ts.config.ts",
+				"tsdown.config.ts",
+				"oxlint.config.ts",
+				".changeset/**"
+			],
 			"linter": {
 				"rules": {
 					"style": {
@@ -112,7 +118,14 @@
 	],
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!src/generated", "!dist", "!node_modules", "!vendor/*.yaml"]
+		"includes": [
+			"**",
+			"!src/generated",
+			"!dist",
+			"!node_modules",
+			"!vendor/*.yaml",
+			"!tools/oxlint/anti-slop"
+		]
 	},
 	"vcs": {
 		"enabled": true,

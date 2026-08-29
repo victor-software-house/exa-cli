@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
+
 //MISE description="Block local package.json version drift from origin/main"
 
-import { env, exit } from 'node:process';
+import { exit, stderr } from 'node:process';
+import { env } from '@cli/env';
+import { match, P } from 'ts-pattern';
 
-const ci = env['CI'];
-if (ci === 'true') {
+if (env.CI === 'true') {
 	exit(0);
 }
 
@@ -44,8 +46,8 @@ for (const file of files) {
 	const remoteVersion = packageVersion(remote.stdout.toString());
 	const localVersion = packageVersion(await Bun.file(file).text());
 	if (remoteVersion !== undefined && remoteVersion !== localVersion) {
-		console.error(`BLOCKED: ${file} version changed locally (${remoteVersion} → ${localVersion})`);
-		console.error('  Versions are CI-managed via changesets.');
+		stderr.write(`BLOCKED: ${file} version changed locally (${remoteVersion} → ${localVersion})\n`);
+		stderr.write('  Versions are CI-managed via changesets.\n');
 		errors += 1;
 	}
 }
@@ -55,19 +57,11 @@ if (errors > 0) {
 }
 
 function packageVersion(text: string): string | undefined {
-	let value: unknown;
 	try {
-		value = JSON.parse(text);
+		return match(JSON.parse(text))
+			.with({ version: P.string }, ({ version }) => version)
+			.otherwise(() => undefined);
 	} catch {
 		return undefined;
 	}
-	if (!isRecord(value)) {
-		return undefined;
-	}
-	const version = value['version'];
-	return typeof version === 'string' ? version : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

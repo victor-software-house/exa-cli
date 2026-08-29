@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { env } from '@cli/env';
 import { zSearchResponse } from '@cli/generated/zod.gen';
 import { parseJson } from '@cli/json';
 
-const skip = process.env['EXA_API_KEY'] === undefined || process.env['EXA_API_KEY'] === '';
+const skip = env.EXA_API_KEY === undefined;
 
 describe.skipIf(skip)('live Exa search', () => {
 	test('search returns results', () => {

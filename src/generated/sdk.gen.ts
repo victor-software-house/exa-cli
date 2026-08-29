@@ -9,17 +9,17 @@ import type { AnswerData, AnswerResponses, FindSimilarData, FindSimilarResponses
 import { zAnswerBody, zAnswerResponse, zFindSimilarBody, zFindSimilarResponse, zGetContentsBody, zGetContentsResponse, zResearchControllerV0GetResearchTaskPath, zResearchControllerV0GetResearchTaskResponse, zResearchTasksCreateBody, zResearchTasksCreateResponse, zResearchTasksListQuery, zResearchTasksListResponse, zSearchBody, zSearchResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
-    /**
-     * You can provide a client instance returned by `createClient()` instead of
-     * individual options. This might be also useful if you want to implement a
-     * custom client.
-     */
-    client?: Client;
-    /**
-     * You can pass arbitrary values through the `meta` object. This can be
-     * used to access values that aren't defined as part of the SDK function.
-     */
-    meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
+  /**
+   * You can provide a client instance returned by `createClient()` instead of
+   * individual options. This might be also useful if you want to implement a
+   * custom client.
+   */
+  client?: Client;
+  /**
+   * You can pass arbitrary values through the `meta` object. This can be
+   * used to access values that aren't defined as part of the SDK function.
+   */
+  meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
 
 /**
@@ -27,20 +27,21 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Perform a search with a Exa prompt-engineered query and retrieve a list of relevant results. Optionally get contents.
  */
-export const search = <ThrowOnError extends boolean = false>(options: Options<SearchData, ThrowOnError>): RequestResult<SearchResponses, unknown, ThrowOnError> => (options.client ?? client).post<SearchResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: zSearchBody,
-        path: z.never().optional(),
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zSearchResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/search',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+export const search = <ThrowOnError extends boolean = true>(options: Options<SearchData, ThrowOnError>): RequestResult<SearchResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<SearchResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zSearchBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zSearchResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/search',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 /**
@@ -48,39 +49,41 @@ export const search = <ThrowOnError extends boolean = false>(options: Options<Se
  *
  * Find similar links to the link provided. Optionally get contents.
  */
-export const findSimilar = <ThrowOnError extends boolean = false>(options: Options<FindSimilarData, ThrowOnError>): RequestResult<FindSimilarResponses, unknown, ThrowOnError> => (options.client ?? client).post<FindSimilarResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: zFindSimilarBody,
-        path: z.never().optional(),
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zFindSimilarResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/findSimilar',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+export const findSimilar = <ThrowOnError extends boolean = true>(options: Options<FindSimilarData, ThrowOnError>): RequestResult<FindSimilarResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<FindSimilarResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zFindSimilarBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zFindSimilarResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/findSimilar',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 /**
  * Get Contents
  */
-export const getContents = <ThrowOnError extends boolean = false>(options: Options<GetContentsData, ThrowOnError>): RequestResult<GetContentsResponses, unknown, ThrowOnError> => (options.client ?? client).post<GetContentsResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: zGetContentsBody,
-        path: z.never().optional(),
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zGetContentsResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/contents',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+export const getContents = <ThrowOnError extends boolean = true>(options: Options<GetContentsData, ThrowOnError>): RequestResult<GetContentsResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<GetContentsResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zGetContentsBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zGetContentsResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/contents',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 /**
@@ -89,67 +92,71 @@ export const getContents = <ThrowOnError extends boolean = false>(options: Optio
  * Performs a search based on the query and generates either a direct answer or a detailed summary with citations, depending on the query type.
  *
  */
-export const answer = <ThrowOnError extends boolean = false>(options: Options<AnswerData, ThrowOnError>): RequestResult<AnswerResponses, unknown, ThrowOnError> => (options.client ?? client).post<AnswerResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: zAnswerBody,
-        path: z.never().optional(),
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zAnswerResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/answer',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+export const answer = <ThrowOnError extends boolean = true>(options: Options<AnswerData, ThrowOnError>): RequestResult<AnswerResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<AnswerResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zAnswerBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zAnswerResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/answer',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 /**
  * List research tasks
  */
-export const researchTasksList = <ThrowOnError extends boolean = false>(options?: Options<ResearchTasksListData, ThrowOnError>): RequestResult<ResearchTasksListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ResearchTasksListResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: z.never().optional(),
-        path: z.never().optional(),
-        query: zResearchTasksListQuery.optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zResearchTasksListResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/research/v0/tasks',
-    ...options
+export const researchTasksList = <ThrowOnError extends boolean = true>(options?: Options<ResearchTasksListData, ThrowOnError>): RequestResult<ResearchTasksListResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<ResearchTasksListResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: z.never().optional(),
+    path: z.never().optional(),
+    query: zResearchTasksListQuery.optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zResearchTasksListResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/research/v0/tasks',
+  ...options
 });
 
 /**
  * Create a research task with instructions and an output schema
  */
-export const researchTasksCreate = <ThrowOnError extends boolean = false>(options: Options<ResearchTasksCreateData, ThrowOnError>): RequestResult<ResearchTasksCreateResponses, unknown, ThrowOnError> => (options.client ?? client).post<ResearchTasksCreateResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: zResearchTasksCreateBody,
-        path: z.never().optional(),
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zResearchTasksCreateResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/research/v0/tasks',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+export const researchTasksCreate = <ThrowOnError extends boolean = true>(options: Options<ResearchTasksCreateData, ThrowOnError>): RequestResult<ResearchTasksCreateResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<ResearchTasksCreateResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zResearchTasksCreateBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zResearchTasksCreateResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/research/v0/tasks',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 /**
  * Get a research task by id
  */
-export const researchControllerV0GetResearchTask = <ThrowOnError extends boolean = false>(options: Options<ResearchControllerV0GetResearchTaskData, ThrowOnError>): RequestResult<ResearchControllerV0GetResearchTaskResponses, unknown, ThrowOnError> => (options.client ?? client).get<ResearchControllerV0GetResearchTaskResponses, unknown, ThrowOnError>({
-    requestValidator: async (data) => await z.object({
-        body: z.never().optional(),
-        path: zResearchControllerV0GetResearchTaskPath,
-        query: z.never().optional()
-    }).parseAsync(data),
-    responseValidator: async (data) => await zResearchControllerV0GetResearchTaskResponse.parseAsync(data),
-    security: [{ name: 'x-api-key', type: 'apiKey' }],
-    url: '/research/v0/tasks/{id}',
-    ...options
+export const researchControllerV0GetResearchTask = <ThrowOnError extends boolean = true>(options: Options<ResearchControllerV0GetResearchTaskData, ThrowOnError>): RequestResult<ResearchControllerV0GetResearchTaskResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).get<ResearchControllerV0GetResearchTaskResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: z.never().optional(),
+    path: zResearchControllerV0GetResearchTaskPath,
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zResearchControllerV0GetResearchTaskResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/research/v0/tasks/{id}',
+  ...options
 });
