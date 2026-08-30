@@ -9,8 +9,12 @@
 	},
 	"os": ["{{ target.os }}"],
 	"cpu": ["{{ target.cpu }}"],
-	{%- if target.libc %}
+	{%- if target.libc != '' %}
 	"libc": ["{{ target.libc }}"],
 	{%- endif %}
+	"publishConfig": {
+		"access": "{{ manifest.publishConfig.access }}",
+		"registry": "{{ manifest.publishConfig.registry }}"
+	},
 	"files": ["bin"]
 }

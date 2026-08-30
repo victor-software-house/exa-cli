@@ -36,7 +36,8 @@ for (const pkg of staged) {
 		continue;
 	}
 	const token = await npmOidcPublishToken(pkg.name, env);
-	await $`bun publish --access public --tolerate-republish`
+	// --registry is explicit: a user-scope .npmrc can route this scope elsewhere.
+	await $`bun publish --access public --tolerate-republish --registry https://registry.npmjs.org`
 		.cwd(pkg.dir)
 		.env({ ...env, BUN_CONFIG_TOKEN: token });
 	await waitForRegistryVersion(pkg.name, pkg.version);

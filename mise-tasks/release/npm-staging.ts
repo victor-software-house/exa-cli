@@ -19,14 +19,37 @@ import manifest from '@pkg' with { type: 'json' };
 import { Liquid } from 'liquidjs';
 import { match, P } from 'ts-pattern';
 
-export const platforms = [
-	{ platform: 'darwin-arm64', os: 'darwin', cpu: 'arm64', libc: null },
-	{ platform: 'darwin-x64', os: 'darwin', cpu: 'x64', libc: null },
+type PlatformTarget = {
+	platform: string;
+	os: 'darwin' | 'linux' | 'win32';
+	cpu: 'arm64' | 'x64';
+	libc?: 'glibc' | 'musl';
+};
+
+export const platforms: readonly PlatformTarget[] = [
+	{ platform: 'darwin-arm64', os: 'darwin', cpu: 'arm64' },
+	{ platform: 'darwin-x64', os: 'darwin', cpu: 'x64' },
 	{ platform: 'linux-x64', os: 'linux', cpu: 'x64', libc: 'glibc' },
-	{ platform: 'linux-arm64', os: 'linux', cpu: 'arm64', libc: null },
+	{ platform: 'linux-arm64', os: 'linux', cpu: 'arm64' },
 	{ platform: 'linux-x64-musl', os: 'linux', cpu: 'x64', libc: 'musl' },
-	{ platform: 'windows-x64', os: 'win32', cpu: 'x64', libc: null },
-] as const;
+	{ platform: 'windows-x64', os: 'win32', cpu: 'x64' },
+];
+
+type RepoManifest = typeof manifest;
+
+// liquidjs strictVariables rejects absent properties and Liquid treats empty
+// strings as truthy; TemplateTarget carries libc as '' when the target has
+// none and the template guards on `target.libc != ''`.
+type TemplateTarget = {
+	platform: string;
+	os: PlatformTarget['os'];
+	cpu: PlatformTarget['cpu'];
+	libc: string;
+};
+
+function templateTarget(target: PlatformTarget): TemplateTarget {
+	return { ...target, libc: target.libc ?? '' };
+}
 
 export type StagedPackage = {
 	dir: string;
@@ -43,8 +66,8 @@ const umbrellaTemplate = liquid.parse(
 	readFileSync(join(templateDir, 'umbrella.package.json.liquid'), 'utf8'),
 );
 
-type PlatformTemplateData = { manifest: typeof manifest; target: (typeof platforms)[number] };
-type UmbrellaTemplateData = { manifest: typeof manifest; platforms: typeof platforms };
+type PlatformTemplateData = { manifest: RepoManifest; target: TemplateTarget };
+type UmbrellaTemplateData = { manifest: RepoManifest; platforms: readonly PlatformTarget[] };
 
 function render(
 	template: ReturnType<typeof liquid.parse>,
@@ -71,7 +94,10 @@ export function stagePlatforms(outDir = 'dist/npm', rawDir = 'dist/binaries/raw'
 		const stagedBinary = join(dir, 'bin', binaryName);
 		copyFileSync(source, stagedBinary);
 		chmodSync(stagedBinary, 0o755);
-		writeFileSync(join(dir, 'package.json'), render(platformTemplate, { manifest, target }));
+		writeFileSync(
+			join(dir, 'package.json'),
+			render(platformTemplate, { manifest, target: templateTarget(target) }),
+		);
 		staged.push({ dir, name: `${manifest.name}-${target.platform}`, version: manifest.version });
 	}
 	return staged;
