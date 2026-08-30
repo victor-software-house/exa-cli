@@ -101,4 +101,4 @@ mise run verify                 # lint + typecheck + unit tests + build
 mise -E test run test:live      # paid Exa calls; skips without EXA_API_KEY
 ```
 
-Releases are CI-owned: merge a changeset, the Release workflow opens a Version Packages PR, and merging it publishes to npm (six platform packages plus the launcher umbrella), tags, and uploads versioned binaries.
+Releases are CI-owned: merge a changeset, the Release workflow opens a Version Packages PR, and merging it publishes to npm (six platform packages plus the launcher umbrella), tags, and uploads versioned binaries. A new npm package name needs a one-time `mise run release:bootstrap` first (browser login; same staged platforms CI publishes).

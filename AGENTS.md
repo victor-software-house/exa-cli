@@ -69,14 +69,7 @@ Versioning is changeset-driven. Publish is `mise run release`: it stages npm man
 
 Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. Raw binaries also land in `dist/binaries/raw/<platform>/` for npm staging. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes. Versioned GitHub Releases (`v$version`) get the same six archives plus SHA256SUMS after `release:tags`, not from the rolling binaries job.
 
-The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/cpu/libc-selected platform package and execs its binary. No `exports`, no published `dist`. New platform packages need a one-time bootstrap before CI can publish them: publish each once locally from its staging dir, then `npm trust github @victor-software-house/exa-cli-<platform> --repository victor-software-house/exa-cli --file release.yml --allow-publish --yes` (run npm outside the repo).
-
-Local-publish trap on the operator machine: user-level `~/.bunfig.toml` and `~/.npmrc` route the `@victor-software-house` scope to GitHub Packages, and they beat the repo bunfig, `--registry`, and `npm_config_` env overrides for `bun publish`. Two wrong-registry publishes happened during setup and were deleted from GitHub Packages. CI publishes are unaffected (clean HOME + OIDC). Until the machine config is fixed chezmoi-side, local bootstrap publishes must run through npm with an explicit scoped override:
-
-```bash
-env 'npm_config_@victor-software-house:registry=https://registry.npmjs.org' \
-  npm publish --access public --registry https://registry.npmjs.org
-```
+The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/cpu/libc-selected platform package and execs its binary. No `exports`, no published `dist`. New npm package names need a one-time `mise run release:bootstrap` before CI can publish them. That task stages the same platform dirs CI will publish, opens an npm browser session through bun-release, publishes missing names, installs GitHub OIDC trust for `.github/workflows/release.yml`, verifies, and deletes the session. Existing names skip publish and still verify trust. Temp `HOME` isolates operator-level `~/.npmrc` / `~/.bunfig.toml` that map `@victor-software-house` to GitHub Packages. Do not store an npm token. Do not invoke the npm CLI.
 
 1. First published npm version is **`0.0.0`**. No changeset until that is live. The first changeset is a patch to `0.0.1`. Default bump is `patch`.
 2. `changesets/action` opens a **Version Packages** PR (version only). Operator merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then uploads versioned binaries.

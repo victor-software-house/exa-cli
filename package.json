@@ -73,7 +73,7 @@
 		"@types/bun": "1.4.0",
 		"@types/node": "26.4.0",
 		"@victor-software-house/anti-slop": "0.0.1",
-		"bun-release": "0.0.0",
+		"bun-release": "0.0.1",
 		"eslint-plugin-zod": "4.10.0",
 		"liquidjs": "10.27.2",
 		"oxlint": "1.80.0",
