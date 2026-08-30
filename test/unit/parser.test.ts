@@ -29,4 +29,30 @@ describe('parser', () => {
 			expect(zSearchBody.parse(result.value.request).query).toBe('latest exa docs');
 		}
 	});
+
+	test('parses context with a query', () => {
+		const result = parse(parser, [
+			'context',
+			'--api-key',
+			'test-key',
+			'React hooks useState examples',
+		]);
+		expect(result.success).toBe(true);
+		if (result.success && result.value.command === 'context') {
+			expect(result.value.query).toBe('React hooks useState examples');
+		}
+	});
+
+	test('parses agent-get with a run id', () => {
+		const result = parse(parser, [
+			'agent-get',
+			'--api-key',
+			'test-key',
+			'agent_run_01j7x9v0m2n4p6q8r0s2t4v6w8',
+		]);
+		expect(result.success).toBe(true);
+		if (result.success && result.value.command === 'agent-get') {
+			expect(result.value.id).toBe('agent_run_01j7x9v0m2n4p6q8r0s2t4v6w8');
+		}
+	});
 });

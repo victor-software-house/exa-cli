@@ -7,4 +7,6 @@
 | File | `exa-openapi-spec.yaml` |
 | Copied as | `vendor/exa-openapi.yaml` |
 
-Do not fetch a floating URL at generate time. Bump the pin by replacing this file, updating the commit above, and running `mise run schema:generate`.
+That GitHub artifact omits `POST /context` and the Agent API. Those paths are local overlays in the same file, taken from [Context (Exa Code)](https://exa.ai/docs/reference/context.md) and the current public spec at `https://exa.ai/docs/exa-spec.yaml` (`/agent/runs`, `/agent/runs/{id}`, `/agent/runs/{id}/cancel` only).
+
+Do not fetch a floating URL at generate time. Bump the GitHub pin by replacing the upstream copy, keeping the local overlays, updating the commit above, and running `mise run schema:generate`.

@@ -5,8 +5,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerData, AnswerResponses, FindSimilarData, FindSimilarResponses, GetContentsData, GetContentsResponses, ResearchControllerV0GetResearchTaskData, ResearchControllerV0GetResearchTaskResponses, ResearchTasksCreateData, ResearchTasksCreateResponses, ResearchTasksListData, ResearchTasksListResponses, SearchData, SearchResponses } from './types.gen';
-import { zAnswerBody, zAnswerResponse, zFindSimilarBody, zFindSimilarResponse, zGetContentsBody, zGetContentsResponse, zResearchControllerV0GetResearchTaskPath, zResearchControllerV0GetResearchTaskResponse, zResearchTasksCreateBody, zResearchTasksCreateResponse, zResearchTasksListQuery, zResearchTasksListResponse, zSearchBody, zSearchResponse } from './zod.gen';
+import type { AnswerData, AnswerResponses, CancelAgentRunData, CancelAgentRunResponses, CreateAgentRunData, CreateAgentRunResponses, FindSimilarData, FindSimilarResponses, GetAgentRunData, GetAgentRunResponses, GetContentsData, GetContentsResponses, GetContextData, GetContextResponses, ResearchControllerV0GetResearchTaskData, ResearchControllerV0GetResearchTaskResponses, ResearchTasksCreateData, ResearchTasksCreateResponses, ResearchTasksListData, ResearchTasksListResponses, SearchData, SearchResponses } from './types.gen';
+import { zAnswerBody, zAnswerResponse, zCancelAgentRunPath, zCancelAgentRunResponse, zCreateAgentRunBody, zCreateAgentRunResponse, zFindSimilarBody, zFindSimilarResponse, zGetAgentRunPath, zGetAgentRunResponse, zGetContentsBody, zGetContentsResponse, zGetContextBody, zGetContextResponse, zResearchControllerV0GetResearchTaskPath, zResearchControllerV0GetResearchTaskResponse, zResearchTasksCreateBody, zResearchTasksCreateResponse, zResearchTasksListQuery, zResearchTasksListResponse, zSearchBody, zSearchResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
   /**
@@ -158,5 +158,79 @@ export const researchControllerV0GetResearchTask = <ThrowOnError extends boolean
   responseStyle: 'data',
   security: [{ name: 'x-api-key', type: 'apiKey' }],
   url: '/research/v0/tasks/{id}',
+  ...options
+});
+
+/**
+ * Context (Exa Code)
+ *
+ * Token-efficient code and documentation snippets for a coding query.
+ */
+export const getContext = <ThrowOnError extends boolean = true>(options: Options<GetContextData, ThrowOnError>): RequestResult<GetContextResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<GetContextResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zGetContextBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zGetContextResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/context',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+});
+
+/**
+ * Create an Agent run
+ */
+export const createAgentRun = <ThrowOnError extends boolean = true>(options: Options<CreateAgentRunData, ThrowOnError>): RequestResult<CreateAgentRunResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<CreateAgentRunResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: zCreateAgentRunBody,
+    path: z.never().optional(),
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zCreateAgentRunResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/agent/runs',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+});
+
+/**
+ * Get an Agent run
+ */
+export const getAgentRun = <ThrowOnError extends boolean = true>(options: Options<GetAgentRunData, ThrowOnError>): RequestResult<GetAgentRunResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).get<GetAgentRunResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: z.never().optional(),
+    path: zGetAgentRunPath,
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zGetAgentRunResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/agent/runs/{id}',
+  ...options
+});
+
+/**
+ * Cancel an Agent run
+ */
+export const cancelAgentRun = <ThrowOnError extends boolean = true>(options: Options<CancelAgentRunData, ThrowOnError>): RequestResult<CancelAgentRunResponses, unknown, ThrowOnError, 'data'> => (options.client ?? client).post<CancelAgentRunResponses, unknown, ThrowOnError, 'data'>({
+  requestValidator: async (data) => await z.object({
+    body: z.never().optional(),
+    path: zCancelAgentRunPath,
+    query: z.never().optional()
+  }).parseAsync(data),
+  responseValidator: async (data) => await zCancelAgentRunResponse.parseAsync(data),
+  responseStyle: 'data',
+  security: [{ name: 'x-api-key', type: 'apiKey' }],
+  url: '/agent/runs/{id}/cancel',
   ...options
 });

@@ -5,6 +5,49 @@ export type ClientOptions = {
   baseUrl: 'https://api.exa.ai' | (string & {});
 };
 
+export type ContextRequest = {
+  query: string;
+  tokensNum?: number | 'dynamic';
+};
+
+export type ContextResponse = {
+  requestId?: string;
+  query?: string;
+  response?: string;
+  resultsCount?: number;
+  costDollars?: {
+    [key: string]: unknown;
+  };
+  searchTime?: number;
+  outputTokens?: number;
+  [key: string]: unknown;
+};
+
+export type AgentRunId = string;
+
+export type CreateAgentRunRequest = {
+  query: string;
+  systemPrompt?: string;
+  outputSchema?: {
+    [key: string]: unknown;
+  };
+  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto' | 'max';
+  previousRunId?: string;
+  metadata?: {
+    [key: string]: string;
+  };
+  dataSources?: Array<{
+    [key: string]: unknown;
+  }>;
+  input?: {
+    [key: string]: unknown;
+  };
+};
+
+export type AgentRun = {
+  [key: string]: unknown;
+};
+
 export type AnswerCitation = {
   /**
    * The temporary ID for the document.
@@ -974,3 +1017,71 @@ export type ResearchControllerV0GetResearchTaskResponses = {
 };
 
 export type ResearchControllerV0GetResearchTaskResponse = ResearchControllerV0GetResearchTaskResponses[keyof ResearchControllerV0GetResearchTaskResponses];
+
+export type GetContextData = {
+  body: ContextRequest;
+  path?: never;
+  query?: never;
+  url: '/context';
+};
+
+export type GetContextResponses = {
+  /**
+   * OK
+   */
+  200: ContextResponse;
+};
+
+export type GetContextResponse = GetContextResponses[keyof GetContextResponses];
+
+export type CreateAgentRunData = {
+  body: CreateAgentRunRequest;
+  path?: never;
+  query?: never;
+  url: '/agent/runs';
+};
+
+export type CreateAgentRunResponses = {
+  /**
+   * Agent run
+   */
+  200: AgentRun;
+};
+
+export type CreateAgentRunResponse = CreateAgentRunResponses[keyof CreateAgentRunResponses];
+
+export type GetAgentRunData = {
+  body?: never;
+  path: {
+    id: AgentRunId;
+  };
+  query?: never;
+  url: '/agent/runs/{id}';
+};
+
+export type GetAgentRunResponses = {
+  /**
+   * Agent run
+   */
+  200: AgentRun;
+};
+
+export type GetAgentRunResponse = GetAgentRunResponses[keyof GetAgentRunResponses];
+
+export type CancelAgentRunData = {
+  body?: never;
+  path: {
+    id: AgentRunId;
+  };
+  query?: never;
+  url: '/agent/runs/{id}/cancel';
+};
+
+export type CancelAgentRunResponses = {
+  /**
+   * Agent run
+   */
+  200: AgentRun;
+};
+
+export type CancelAgentRunResponse = CancelAgentRunResponses[keyof CancelAgentRunResponses];

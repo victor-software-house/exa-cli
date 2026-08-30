@@ -1,13 +1,41 @@
 import { writeFileSync } from 'node:fs';
+import {
+	AgentWaitTimeoutError,
+	DEFAULT_AGENT_WAIT_SECONDS,
+	jsonStringField,
+	waitForAgentRun,
+} from '@cli/agent/wait';
 import { CacheStore, DEFAULT_TTL_SECONDS, defaultCachePath } from '@cli/cache/store';
-import { answer, getContents, search } from '@cli/generated/sdk.gen';
-import type { AnswerData, GetContentsData, SearchData } from '@cli/generated/types.gen';
+import {
+	answer,
+	cancelAgentRun,
+	createAgentRun,
+	findSimilar,
+	getAgentRun,
+	getContents,
+	getContext,
+	search,
+} from '@cli/generated/sdk.gen';
+import type {
+	AnswerData,
+	CreateAgentRunData,
+	FindSimilarData,
+	GetContentsData,
+	GetContextData,
+	SearchData,
+} from '@cli/generated/types.gen';
 import {
 	type AnswerBody,
+	type CreateAgentRunBody,
+	type FindSimilarBody,
 	type GetContentsBody,
+	type GetContextBody,
 	type SearchBody,
 	zAnswerBody,
+	zCreateAgentRunBody,
+	zFindSimilarBody,
 	zGetContentsBody,
+	zGetContextBody,
 	zSearchBody,
 } from '@cli/generated/zod.gen';
 import { createExaClient } from '@cli/http/client';
@@ -33,7 +61,7 @@ type Parsed = Awaited<ReturnType<typeof runAppParse>>;
 async function runAppParse(args?: readonly string[]) {
 	const options = {
 		programName: 'exa',
-		brief: message`CLI for Exa search, contents, and answer.`,
+		brief: message`CLI for Exa search, contents, answer, similar, context, and agent.`,
 		help: 'both' as const,
 		version,
 		completion: 'both' as const,
@@ -59,6 +87,12 @@ async function dispatch(parsed: Parsed): Promise<void> {
 		.with({ command: 'search' }, runSearch)
 		.with({ command: 'contents' }, runContents)
 		.with({ command: 'answer' }, runAnswer)
+		.with({ command: 'similar' }, runSimilar)
+		.with({ command: 'context' }, runContext)
+		.with({ command: 'agent-create' }, runAgentCreate)
+		.with({ command: 'agent-get' }, runAgentGet)
+		.with({ command: 'agent-wait' }, runAgentWait)
+		.with({ command: 'agent-cancel' }, runAgentCancel)
 		.exhaustive();
 }
 
@@ -145,6 +179,192 @@ async function runAnswer(parsed: Extract<Parsed, { command: 'answer' }>): Promis
 	});
 }
 
+async function runSimilar(parsed: Extract<Parsed, { command: 'similar' }>): Promise<void> {
+	const started = Date.now();
+	const body =
+		parsed.request !== undefined ? zFindSimilarBody.parse(parsed.request) : flagSimilarBody(parsed);
+	await runOperation({
+		parsed,
+		operation: 'findSimilar',
+		body,
+		started,
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await findSimilar({
+						client,
+						// SAFETY: FindSimilarBody is z.input. Hey API's Data body uses prop?: T;
+						// exactOptionalPropertyTypes rejects T | undefined.
+						body: body as FindSimilarData['body'],
+					}),
+				),
+			),
+	});
+}
+
+async function runContext(parsed: Extract<Parsed, { command: 'context' }>): Promise<void> {
+	const started = Date.now();
+	const body =
+		parsed.request !== undefined ? zGetContextBody.parse(parsed.request) : flagContextBody(parsed);
+	await runOperation({
+		parsed,
+		operation: 'context',
+		body,
+		started,
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await getContext({
+						client,
+						// SAFETY: GetContextBody is z.input. Hey API's Data body uses prop?: T;
+						// exactOptionalPropertyTypes rejects T | undefined.
+						body: body as GetContextData['body'],
+					}),
+				),
+			),
+	});
+}
+
+async function runAgentCreate(parsed: Extract<Parsed, { command: 'agent-create' }>): Promise<void> {
+	const started = Date.now();
+	const body =
+		parsed.request !== undefined
+			? zCreateAgentRunBody.parse(parsed.request)
+			: flagAgentCreateBody(parsed);
+	const shouldWait = parsed.wait || parsed.timeout !== undefined;
+	if (!shouldWait) {
+		await runOperation({
+			parsed,
+			operation: 'agent-create',
+			body,
+			started,
+			disableCache: true,
+			fetchBody: async (client) =>
+				parseJson(
+					JSON.stringify(
+						await createAgentRun({
+							client,
+							// SAFETY: CreateAgentRunBody is z.input. Hey API's Data body uses prop?: T;
+							// exactOptionalPropertyTypes rejects T | undefined.
+							body: body as CreateAgentRunData['body'],
+						}),
+					),
+				),
+		});
+		return;
+	}
+	const apiKey = requireApiKey(parsed.apiKey);
+	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
+	const client = createExaClient({ apiKey, apiUrl });
+	await runWaitAndWrite(parsed, started, 'agent-create', async () => {
+		const created = parseJson(
+			JSON.stringify(
+				await createAgentRun({
+					client,
+					// SAFETY: CreateAgentRunBody is z.input. Hey API's Data body uses prop?: T;
+					// exactOptionalPropertyTypes rejects T | undefined.
+					body: body as CreateAgentRunData['body'],
+				}),
+			),
+		);
+		const id = jsonStringField(created, 'id');
+		if (id === undefined) {
+			fail('agent-create did not return an id.');
+		}
+		return await pollAgentRun(client, id, parsed.timeout);
+	});
+}
+
+async function runAgentGet(parsed: Extract<Parsed, { command: 'agent-get' }>): Promise<void> {
+	const started = Date.now();
+	await runOperation({
+		parsed,
+		operation: 'agent-get',
+		body: { id: parsed.id },
+		started,
+		disableCache: true,
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await getAgentRun({
+						client,
+						path: { id: parsed.id },
+					}),
+				),
+			),
+	});
+}
+
+async function runAgentWait(parsed: Extract<Parsed, { command: 'agent-wait' }>): Promise<void> {
+	const started = Date.now();
+	const apiKey = requireApiKey(parsed.apiKey);
+	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
+	const client = createExaClient({ apiKey, apiUrl });
+	await runWaitAndWrite(parsed, started, 'agent-wait', () =>
+		pollAgentRun(client, parsed.id, parsed.timeout),
+	);
+}
+
+async function pollAgentRun(
+	client: ReturnType<typeof createExaClient>,
+	id: string,
+	timeoutSeconds: number | undefined,
+): Promise<JsonValue> {
+	return await waitForAgentRun({
+		id,
+		timeoutMs: (timeoutSeconds ?? DEFAULT_AGENT_WAIT_SECONDS) * 1000,
+		getRun: async (runId) =>
+			parseJson(
+				JSON.stringify(
+					await getAgentRun({
+						client,
+						path: { id: runId },
+					}),
+				),
+			),
+		onStatus: (status) => {
+			process.stderr.write(`agent-wait: ${status}\n`);
+		},
+	});
+}
+
+async function runWaitAndWrite(
+	parsed: Globals,
+	started: number,
+	operation: string,
+	fetchPayload: () => Promise<JsonValue>,
+): Promise<void> {
+	try {
+		writeOutput(parsed, await fetchPayload(), false, undefined, started);
+	} catch (error) {
+		if (error instanceof AgentWaitTimeoutError) {
+			writeOutput(parsed, error.lastPayload, false, undefined, started);
+			fail(error.message);
+		}
+		fail(`${operation} failed: ${errorMessageSchema.parse(error)}`);
+	}
+}
+
+async function runAgentCancel(parsed: Extract<Parsed, { command: 'agent-cancel' }>): Promise<void> {
+	const started = Date.now();
+	await runOperation({
+		parsed,
+		operation: 'agent-cancel',
+		body: { id: parsed.id },
+		started,
+		disableCache: true,
+		fetchBody: async (client) =>
+			parseJson(
+				JSON.stringify(
+					await cancelAgentRun({
+						client,
+						path: { id: parsed.id },
+					}),
+				),
+			),
+	});
+}
+
 type Globals = {
 	apiKey: string | undefined;
 	apiUrl: string | undefined;
@@ -164,13 +384,17 @@ async function runOperation(options: {
 	operation: string;
 	body: object;
 	started: number;
+	disableCache?: boolean;
 	fetchBody: (client: ReturnType<typeof createExaClient>) => Promise<JsonValue>;
 }): Promise<void> {
 	const apiKey = requireApiKey(options.parsed.apiKey);
 	const apiUrl = options.parsed.apiUrl ?? 'https://api.exa.ai';
 	const host = new URL(apiUrl).host;
 	const ttlSeconds = options.parsed.ttl ?? DEFAULT_TTL_SECONDS;
-	const mode = cacheMode({ refresh: options.parsed.refresh, noCache: options.parsed.noCache });
+	const mode =
+		options.disableCache === true
+			? 'off'
+			: cacheMode({ refresh: options.parsed.refresh, noCache: options.parsed.noCache });
 	const cache = mode === 'off' ? undefined : new CacheStore(defaultCachePath());
 	const client = createExaClient({ apiKey, apiUrl });
 	try {
@@ -282,6 +506,40 @@ function flagAnswerBody(parsed: Extract<Parsed, { command: 'answer' }>): AnswerB
 		query: parsed.query,
 		text: parsed.text,
 	};
+}
+
+function flagSimilarBody(parsed: Extract<Parsed, { command: 'similar' }>): FindSimilarBody {
+	if (parsed.url === undefined) {
+		fail('similar requires a URL or --request.');
+	}
+	return {
+		url: parsed.url,
+		contents: { highlights: true },
+	};
+}
+
+function flagContextBody(parsed: Extract<Parsed, { command: 'context' }>): GetContextBody {
+	if (parsed.query === undefined) {
+		fail('context requires a query or --request.');
+	}
+	const body: GetContextBody = { query: parsed.query };
+	if (parsed.tokensNum !== undefined) {
+		body.tokensNum = parsed.tokensNum;
+	}
+	return body;
+}
+
+function flagAgentCreateBody(
+	parsed: Extract<Parsed, { command: 'agent-create' }>,
+): CreateAgentRunBody {
+	if (parsed.query === undefined) {
+		fail('agent-create requires a query or --request.');
+	}
+	const body: CreateAgentRunBody = { query: parsed.query };
+	if (parsed.effort !== undefined) {
+		body.effort = parsed.effort;
+	}
+	return body;
 }
 
 function requireApiKey(apiKey: string | undefined): string {

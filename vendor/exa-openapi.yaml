@@ -682,6 +682,75 @@ paths:
           $ref: "#/components/responses/ResearchTaskResponse"
       summary: Get a research task by id
       tags: *ref_0
+  /context:
+    post:
+      operationId: getContext
+      summary: Context (Exa Code)
+      description: Token-efficient code and documentation snippets for a coding query.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextResponse"
+  /agent/runs:
+    post:
+      operationId: createAgentRun
+      summary: Create an Agent run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentRunRequest"
+      responses:
+        "200":
+          description: Agent run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+  /agent/runs/{id}:
+    get:
+      operationId: getAgentRun
+      summary: Get an Agent run
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/AgentRunId"
+      responses:
+        "200":
+          description: Agent run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+  /agent/runs/{id}/cancel:
+    post:
+      operationId: cancelAgentRun
+      summary: Cancel an Agent run
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/AgentRunId"
+      responses:
+        "200":
+          description: Agent run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
 components:
   securitySchemes:
     apikey:
@@ -694,6 +763,83 @@ components:
       scheme: bearer
       description: API key can be provided either via x-api-key header or Authorization header with Bearer scheme
   schemas:
+    ContextRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+        tokensNum:
+          oneOf:
+            - type: integer
+              minimum: 50
+            - type: string
+              const: dynamic
+    ContextResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+        query:
+          type: string
+        response:
+          type: string
+        resultsCount:
+          type: integer
+        costDollars:
+          type: object
+          additionalProperties: true
+        searchTime:
+          type: number
+        outputTokens:
+          type: integer
+      additionalProperties: true
+    AgentRunId:
+      type: string
+      minLength: 1
+    CreateAgentRunRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+        systemPrompt:
+          type: string
+        outputSchema:
+          type: object
+          additionalProperties: true
+        effort:
+          type: string
+          enum:
+            - minimal
+            - low
+            - medium
+            - high
+            - xhigh
+            - auto
+            - max
+        previousRunId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        dataSources:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: true
+        input:
+          type: object
+          additionalProperties: true
+    AgentRun:
+      type: object
+      additionalProperties: true
     AnswerCitation:
       type: object
       properties:

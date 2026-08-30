@@ -3,6 +3,47 @@
 
 import * as z from 'zod';
 
+export const zContextRequest = z.object({
+  query: z.string().min(1),
+  tokensNum: z.union([
+    z.int().gte(50),
+    z.literal('dynamic')
+  ]).optional()
+});
+
+export const zContextResponse = z.object({
+  requestId: z.string().optional(),
+  query: z.string().optional(),
+  response: z.string().optional(),
+  resultsCount: z.int().optional(),
+  costDollars: z.record(z.string(), z.unknown()).optional(),
+  searchTime: z.number().optional(),
+  outputTokens: z.int().optional()
+});
+
+export const zAgentRunId = z.string().min(1);
+
+export const zCreateAgentRunRequest = z.object({
+  query: z.string().min(1),
+  systemPrompt: z.string().optional(),
+  outputSchema: z.record(z.string(), z.unknown()).optional(),
+  effort: z.enum([
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'auto',
+    'max'
+  ]).optional(),
+  previousRunId: z.string().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  dataSources: z.array(z.record(z.string(), z.unknown())).max(5).optional(),
+  input: z.record(z.string(), z.unknown()).optional()
+});
+
+export const zAgentRun = z.record(z.string(), z.unknown());
+
 export const zAnswerCitation = z.object({
   id: z.string().optional(),
   url: z.url().optional(),
@@ -469,3 +510,39 @@ export const zResearchControllerV0GetResearchTaskPath = z.object({
  * Research task details
  */
 export const zResearchControllerV0GetResearchTaskResponse = zResearchTaskDto;
+
+export const zGetContextBody = zContextRequest;
+
+export type GetContextBody = z.input<typeof zGetContextBody>;
+
+/**
+ * OK
+ */
+export const zGetContextResponse = zContextResponse;
+
+export const zCreateAgentRunBody = zCreateAgentRunRequest;
+
+export type CreateAgentRunBody = z.input<typeof zCreateAgentRunBody>;
+
+/**
+ * Agent run
+ */
+export const zCreateAgentRunResponse = zAgentRun;
+
+export const zGetAgentRunPath = z.object({
+  id: zAgentRunId
+});
+
+/**
+ * Agent run
+ */
+export const zGetAgentRunResponse = zAgentRun;
+
+export const zCancelAgentRunPath = z.object({
+  id: zAgentRunId
+});
+
+/**
+ * Agent run
+ */
+export const zCancelAgentRunResponse = zAgentRun;

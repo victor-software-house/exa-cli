@@ -1,7 +1,7 @@
 {
 	"name": "@victor-software-house/exa-cli",
 	"version": "0.0.0",
-	"description": "Public CLI for Exa search, contents, and answer with a local SQLite cache.",
+	"description": "Public CLI for Exa search, contents, answer, similar, context, and agent runs with a local SQLite cache.",
 	"license": "MIT",
 	"author": {
 		"name": "Victor Araújo",

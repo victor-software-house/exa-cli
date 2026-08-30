@@ -1,4 +1,11 @@
-import { zAnswerBody, zGetContentsBody, zSearchBody } from '@cli/generated/zod.gen';
+import {
+	zAnswerBody,
+	zCreateAgentRunBody,
+	zFindSimilarBody,
+	zGetContentsBody,
+	zGetContextBody,
+	zSearchBody,
+} from '@cli/generated/zod.gen';
 import { parseJson } from '@cli/json';
 import { object, or } from '@optique/core/constructs';
 import { message } from '@optique/core/message';
@@ -20,6 +27,13 @@ const countSchema = z.coerce
 	.number()
 	.positive({ error: 'Expected a positive number.' })
 	.meta({ description: 'Positive count' });
+
+const tokensNumSchema = z
+	.union([
+		z.literal('dynamic'),
+		z.coerce.number().int().gte(50, { error: 'tokensNum must be >= 50 or dynamic.' }),
+	])
+	.meta({ description: 'Context token budget' });
 
 function jsonBody(schema: z.ZodType) {
 	return z
@@ -212,6 +226,140 @@ const answerCommand = command(
 	}),
 );
 
+const similarCommand = command(
+	'similar',
+	object({
+		command: constant('similar'),
+		...globalFields(),
+		url: optional(
+			argument(zod(querySchema, { placeholder: 'URL' }), {
+				description: message`Source URL. Omit when using --request.`,
+			}),
+		),
+		request: optional(
+			option(
+				'--request',
+				zod(jsonBody(zFindSimilarBody), {
+					metavar: 'JSON',
+					placeholder: zFindSimilarBody.parse({ url: 'https://exa.ai' }),
+				}),
+				{
+					description: message`JSON body for /findSimilar.`,
+				},
+			),
+		),
+	}),
+);
+
+const contextCommand = command(
+	'context',
+	object({
+		command: constant('context'),
+		...globalFields(),
+		query: optional(
+			argument(zod(querySchema, { placeholder: 'query' }), {
+				description: message`Coding query. Omit when using --request.`,
+			}),
+		),
+		request: optional(
+			option(
+				'--request',
+				zod(jsonBody(zGetContextBody), {
+					metavar: 'JSON',
+					placeholder: zGetContextBody.parse({ query: 'query' }),
+				}),
+				{
+					description: message`JSON body for /context.`,
+				},
+			),
+		),
+		tokensNum: optional(
+			option('--tokens-num', zod(tokensNumSchema, { placeholder: 'dynamic' }), {
+				description: message`Token budget, or dynamic.`,
+			}),
+		),
+	}),
+);
+
+const agentCreateCommand = command(
+	'agent-create',
+	object({
+		command: constant('agent-create'),
+		...globalFields(),
+		query: optional(
+			argument(zod(querySchema, { placeholder: 'query' }), {
+				description: message`Agent instructions. Omit when using --request.`,
+			}),
+		),
+		request: optional(
+			option(
+				'--request',
+				zod(jsonBody(zCreateAgentRunBody), {
+					metavar: 'JSON',
+					placeholder: zCreateAgentRunBody.parse({ query: 'query' }),
+				}),
+				{
+					description: message`JSON body for POST /agent/runs.`,
+				},
+			),
+		),
+		effort: optional(
+			option('--effort', choice(['minimal', 'low', 'medium', 'high', 'xhigh', 'auto', 'max']), {
+				description: message`Agent effort.`,
+			}),
+		),
+		wait: withDefault(
+			flag('--wait', {
+				description: message`Poll until the run is completed, failed, or cancelled.`,
+			}),
+			false,
+		),
+		timeout: optional(
+			option('--timeout', zod(countSchema, { placeholder: 3600 }), {
+				description: message`Wait timeout in seconds. Default 3600. Implies --wait.`,
+			}),
+		),
+	}),
+);
+
+const agentGetCommand = command(
+	'agent-get',
+	object({
+		command: constant('agent-get'),
+		...globalFields(),
+		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+			description: message`Agent run ID.`,
+		}),
+	}),
+);
+
+const agentCancelCommand = command(
+	'agent-cancel',
+	object({
+		command: constant('agent-cancel'),
+		...globalFields(),
+		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+			description: message`Agent run ID.`,
+		}),
+	}),
+);
+
+const agentWaitCommand = command(
+	'agent-wait',
+	object({
+		command: constant('agent-wait'),
+		...globalFields(),
+		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+			description: message`Agent run ID.`,
+		}),
+		timeout: optional(
+			option('--timeout', zod(countSchema, { placeholder: 3600 }), {
+				description: message`Wait timeout in seconds. Default 3600.`,
+			}),
+		),
+	}),
+);
+
 const doctorCommand = command(
 	'doctor',
 	object({
@@ -220,4 +368,15 @@ const doctorCommand = command(
 	}),
 );
 
-export const parser = or(searchCommand, contentsCommand, answerCommand, doctorCommand);
+export const parser = or(
+	searchCommand,
+	contentsCommand,
+	answerCommand,
+	similarCommand,
+	contextCommand,
+	agentCreateCommand,
+	agentGetCommand,
+	agentWaitCommand,
+	agentCancelCommand,
+	doctorCommand,
+);
