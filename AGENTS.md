@@ -72,7 +72,10 @@ Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun bui
 The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/cpu/libc-selected platform package and execs its binary. No `exports`, no published `dist`. New npm package names need a one-time `mise run release:bootstrap` before CI can publish them. That task stages the same platform dirs CI will publish, opens an npm browser session through bun-release, publishes missing names, installs GitHub OIDC trust for `.github/workflows/release.yml`, verifies, and deletes the session. Existing names skip publish and still verify trust. Temp `HOME` isolates operator-level `~/.npmrc` / `~/.bunfig.toml` that map `@victor-software-house` to GitHub Packages. Do not store an npm token. Do not invoke the npm CLI.
 
 1. First published npm version is **`0.0.0`**. No changeset until that is live. The first changeset is a patch to `0.0.1`. Default bump is `patch`.
-2. `changesets/action` opens a **Version Packages** PR (version only). Operator merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then uploads versioned binaries.
+2. `changesets/action` opens a **Version Packages** PR (version only) with a
+   `vsh-changeset-version` installation token, not `github.token`. Operator
+   merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then
+   uploads versioned binaries.
 
 - Never run `changeset version` or `changeset publish` locally.
 - Never hand-edit versions in `package.json` or `CHANGELOG.md` after the `0.0.0` scaffold.
