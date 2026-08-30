@@ -71,6 +71,13 @@ Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun bui
 
 The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/cpu/libc-selected platform package and execs its binary. No `exports`, no published `dist`. New platform packages need a one-time bootstrap before CI can publish them: publish each once locally from its staging dir, then `npm trust github @victor-software-house/exa-cli-<platform> --repository victor-software-house/exa-cli --file release.yml --allow-publish --yes` (run npm outside the repo).
 
+Local-publish trap on the operator machine: user-level `~/.bunfig.toml` and `~/.npmrc` route the `@victor-software-house` scope to GitHub Packages, and they beat the repo bunfig, `--registry`, and `npm_config_` env overrides for `bun publish`. Two wrong-registry publishes happened during setup and were deleted from GitHub Packages. CI publishes are unaffected (clean HOME + OIDC). Until the machine config is fixed chezmoi-side, local bootstrap publishes must run through npm with an explicit scoped override:
+
+```bash
+env 'npm_config_@victor-software-house:registry=https://registry.npmjs.org' \
+  npm publish --access public --registry https://registry.npmjs.org
+```
+
 1. First published npm version is **`0.0.0`**. No changeset until that is live. The first changeset is a patch to `0.0.1`. Default bump is `patch`.
 2. `changesets/action` opens a **Version Packages** PR (version only). Operator merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then uploads versioned binaries.
 
