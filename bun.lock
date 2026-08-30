@@ -26,6 +26,8 @@
         "@oxlint/plugins": "1.80.0",
         "@types/bun": "1.4.0",
         "@types/node": "26.4.0",
+        "@victor-software-house/anti-slop": "0.0.1",
+        "bun-release": "0.0.0",
         "eslint-plugin-zod": "4.10.0",
         "liquidjs": "10.27.2",
         "oxlint": "1.80.0",
@@ -358,6 +360,8 @@
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
+    "@victor-software-house/anti-slop": ["@victor-software-house/anti-slop@0.0.1", "", { "dependencies": { "@oxlint/plugins": "1.80.0", "ts-pattern": "5.9.0" }, "peerDependencies": { "oxlint": "1.80.0" } }, "sha512-cH7BR6SNQV+2XbZZO9whlX3rkNwoaVwqWd0fMCkB4JrslC6DQFUsWWdC4AvM7ps0bTtUDXN+FeeQuNNKHdurDg=="],
+
     "@yuku-codegen/binding-android-arm64": ["@yuku-codegen/binding-android-arm64@0.8.7", "", { "os": "android", "cpu": "arm64" }, "sha512-C/0zV5IhgVdYhGJTwrY0v8dknxlhiKwtVJkMUaexu9/QvRmzlV4vfU3hZlUSgqc2BxQHntL1mCVbDq8j0FRFDw=="],
 
     "@yuku-codegen/binding-darwin-arm64": ["@yuku-codegen/binding-darwin-arm64@0.8.7", "", { "os": "darwin", "cpu": "arm64" }, "sha512-/u+REDMI4a0/lsJXTM4c53/w31OGZLOReZIyg62uhgLs0kc8NHsj/nOcxTdlQjq5gi0zhdkccD9LaLTXcdzPvw=="],
@@ -435,6 +439,8 @@
     "brace-expansion": ["brace-expansion@5.0.9", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg=="],
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
+
+    "bun-release": ["bun-release@0.0.0", "", { "dependencies": { "ts-pattern": "5.9.0" } }, "sha512-q2OxaAdRLLoUPX16w3Cq4AWMJ/DLI8Nx9fmsuPMakoqvgUtLjHlCCR4F5S5gsordw/qZnHBURORVuQGShdreFg=="],
 
     "bun-types": ["bun-types@1.4.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q=="],
 

@@ -79,25 +79,32 @@ jobs:
       - name: Pack dry-run
         run: mise run pack
 
-      # TODO(publish-gate): blocked until @victor-software-house/anti-slop is on npm. Re-enable; do not delete.
-      - name: Create release PR or publish
-        if: false
+      - name: Create Version Packages PR
         id: changesets
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           version: mise run version
-          publish: mise run release
           commit: "chore(release): version packages"
           title: "chore(release): version packages"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Compile binaries
-        if: steps.changesets.outputs.published == 'true'
-        run: mise run compile
+      - name: Mint npm OIDC token
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: mise run release:oidc
 
-      - name: Upload binaries to the GitHub release
-        if: steps.changesets.outputs.published == 'true'
+      - name: Publish
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: mise run release
+
+      - name: Tag and create GitHub Release
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: mise run release:tags
         env:
           GH_TOKEN: ${{ github.token }}
-        run: mise run release:binaries
+
+      - name: Upload versioned binaries
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: mise run release:versioned-binaries

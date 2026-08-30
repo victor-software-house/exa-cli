@@ -14,7 +14,7 @@ Public Exa CLI. This is not the infer-lab aggregator.
 | `src/http/` | Hey API client wrapper |
 | `src/output/` | stdout/stderr presenter |
 | `src/generated/` | OpenAPI output — regenerate, do not edit |
-| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release:binaries`). `schema:generate` is the one-liner in `mise.toml`. |
+| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release`, `release:oidc`, `release:tags`, `release:binaries`, `release:versioned-binaries`). `schema:generate` is the one-liner in `mise.toml`. |
 | `vendor/exa-openapi.yaml` | SHA-pinned Exa spec |
 | `skills/exa/` | skills.sh skill |
 
@@ -63,17 +63,19 @@ mise env --json | jq 'keys'
 
 ## Release discipline
 
-Versioning is changeset-driven. npm is gated until `@victor-software-house/anti-slop` is on npm. `rg TODO(publish-gate)` is the re-enable checklist. Do not delete Changesets, OIDC, or `mise run release`.
+Versioning is changeset-driven. Publish is bun-release (`mise run release:oidc`,
+then `bun publish --access public --tolerate-republish`, then `mise run release:tags`).
+Never `changeset publish`. Never `publish:` on `changesets/action`.
 
-Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. That job stays after npm unlock. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes.
+Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes. Versioned GitHub Releases (`v$version`) get the same six archives plus SHA256SUMS after `release:tags`, not from the rolling binaries job.
 
-1. First npm version is **`0.0.0`**, after the publish gate. Then later functional PRs add a `.changeset/*.md` file. Default bump is `patch`.
-2. `changesets/action` opens a **Version Packages** PR. Operator merges it → CI publishes via OIDC. Versioned GitHub Releases get the same six archives.
+1. First published npm version is **`0.0.0`**. No changeset until that is live. The first changeset is a patch to `0.0.1`. Default bump is `patch`.
+2. `changesets/action` opens a **Version Packages** PR (version only). Operator merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then uploads versioned binaries.
 
 - Never run `changeset version` or `changeset publish` locally.
 - Never hand-edit versions in `package.json` or `CHANGELOG.md` after the `0.0.0` scaffold.
 - `minor` only for notable new surface. Never `major` on `0.x` unless explicitly decided.
-- No `NPM_TOKEN` in workflows.
+- No `NPM_TOKEN` / `NODE_AUTH_TOKEN` in workflows. Auth is `$BUN_CONFIG_TOKEN` via bunfig.
 - Runners are GitHub-hosted `ubuntu-24.04`, not Namespace. No macOS/Windows runner matrix.
 
 ## Conventions
@@ -81,5 +83,5 @@ Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun bui
 - Conventional Commits; no AI attribution trailers
 - No `../` imports in `src/` or `test/` — use `@cli/*` and `@test/*`
 - Tabs, single quotes, 100-col (Biome)
-- `tsconfig.json` typechecks src, tests, mise-tasks, and root configs. `tsconfig.build.json` is src-only for tsdown dts. Vendored oxlint plugins stay out of both.
+- `tsconfig.json` typechecks src, tests, mise-tasks, and root configs. `tsconfig.build.json` is src-only for tsdown dts.
 - Skills live in `skills/exa/`

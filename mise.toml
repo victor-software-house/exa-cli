@@ -88,11 +88,7 @@ run = "changeset status --since=origin/main"
 
 [tasks.version]
 description = "Generate Changesets version PR changes"
-run = "changeset version"
-
-[tasks.release]
-description = "Publish to public npm via Changesets"
-run = "changeset publish"
+run = ["changeset version", "bun update --lockfile-only"]
 
 [tasks."schema:generate"]
 description = "Regenerate src/generated from the pinned Exa OpenAPI spec"

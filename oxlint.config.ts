@@ -8,7 +8,6 @@ export default defineConfig({
 		'src/generated/**',
 		'dist/**',
 		'vendor/**',
-		'tools/oxlint/anti-slop/**',
 		'.agents/**',
 		'.claude/**',
 		'.codex/**',
@@ -33,10 +32,7 @@ export default defineConfig({
 			name: '@limegrass/import-alias',
 			specifier: '@limegrass/eslint-plugin-import-alias',
 		},
-		{
-			name: 'anti-slop',
-			specifier: './tools/oxlint/anti-slop/index.ts',
-		},
+		'@victor-software-house/anti-slop',
 	],
 	rules: {
 		'no-console': 'error',
@@ -174,6 +170,7 @@ export default defineConfig({
 			rules: {
 				// Hey API body optional keys diverge from Zod output under exactOptionalPropertyTypes.
 				'typescript/no-unsafe-type-assertion': 'off',
+				'anti-slop/require-safety-comment-for-type-assertion': 'off',
 			},
 		},
 	],

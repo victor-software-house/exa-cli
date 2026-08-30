@@ -118,14 +118,7 @@
 	],
 	"files": {
 		"ignoreUnknown": true,
-		"includes": [
-			"**",
-			"!src/generated",
-			"!dist",
-			"!node_modules",
-			"!vendor/*.yaml",
-			"!tools/oxlint/anti-slop"
-		]
+		"includes": ["**", "!src/generated", "!dist", "!node_modules", "!vendor/*.yaml"]
 	},
 	"vcs": {
 		"enabled": true,
