@@ -1,0 +1,16 @@
+{
+	"name": "{{ manifest.name }}-{{ target.platform }}",
+	"version": "{{ manifest.version }}",
+	"description": "exa-cli compiled binary for {{ target.platform }}",
+	"license": "{{ manifest.license }}",
+	"repository": {
+		"type": "{{ manifest.repository.type }}",
+		"url": "{{ manifest.repository.url }}"
+	},
+	"os": ["{{ target.os }}"],
+	"cpu": ["{{ target.cpu }}"],
+	{%- if target.libc %}
+	"libc": ["{{ target.libc }}"],
+	{%- endif %}
+	"files": ["bin"]
+}

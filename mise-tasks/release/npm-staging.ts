@@ -8,27 +8,25 @@ import {
 	cpSync,
 	existsSync,
 	mkdirSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { stdout } from 'node:process';
+import { fileURLToPath } from 'node:url';
 import manifest from '@pkg' with { type: 'json' };
-
-export const packageName = '@victor-software-house/exa-cli';
+import { Liquid } from 'liquidjs';
+import { match, P } from 'ts-pattern';
 
 export const platforms = [
-	{ platform: 'darwin-arm64', os: 'darwin', cpu: 'arm64' },
-	{ platform: 'darwin-x64', os: 'darwin', cpu: 'x64' },
+	{ platform: 'darwin-arm64', os: 'darwin', cpu: 'arm64', libc: null },
+	{ platform: 'darwin-x64', os: 'darwin', cpu: 'x64', libc: null },
 	{ platform: 'linux-x64', os: 'linux', cpu: 'x64', libc: 'glibc' },
-	{ platform: 'linux-arm64', os: 'linux', cpu: 'arm64' },
+	{ platform: 'linux-arm64', os: 'linux', cpu: 'arm64', libc: null },
 	{ platform: 'linux-x64-musl', os: 'linux', cpu: 'x64', libc: 'musl' },
-	{ platform: 'windows-x64', os: 'win32', cpu: 'x64' },
+	{ platform: 'windows-x64', os: 'win32', cpu: 'x64', libc: null },
 ] as const;
-
-export function platformPackageName(platform: string): string {
-	return `${packageName}-${platform}`;
-}
 
 export type StagedPackage = {
 	dir: string;
@@ -36,10 +34,27 @@ export type StagedPackage = {
 	version: string;
 };
 
-type NpmManifest = Record<string, string | string[] | Record<string, string>>;
+const templateDir = fileURLToPath(new URL('./npm', import.meta.url));
+const liquid = new Liquid({ cache: true, strictFilters: true, strictVariables: true });
+const platformTemplate = liquid.parse(
+	readFileSync(join(templateDir, 'platform.package.json.liquid'), 'utf8'),
+);
+const umbrellaTemplate = liquid.parse(
+	readFileSync(join(templateDir, 'umbrella.package.json.liquid'), 'utf8'),
+);
 
-function writeManifest(dir: string, staged: NpmManifest): void {
-	writeFileSync(join(dir, 'package.json'), `${JSON.stringify(staged, null, '\t')}\n`);
+type PlatformTemplateData = { manifest: typeof manifest; target: (typeof platforms)[number] };
+type UmbrellaTemplateData = { manifest: typeof manifest; platforms: typeof platforms };
+
+function render(
+	template: ReturnType<typeof liquid.parse>,
+	data: PlatformTemplateData | UmbrellaTemplateData,
+): string {
+	return match(liquid.renderSync(template, data))
+		.with(P.string, (text) => text)
+		.otherwise(() => {
+			throw new Error('liquid render did not return a string');
+		});
 }
 
 export function stagePlatforms(outDir = 'dist/npm', rawDir = 'dist/binaries/raw'): StagedPackage[] {
@@ -56,18 +71,8 @@ export function stagePlatforms(outDir = 'dist/npm', rawDir = 'dist/binaries/raw'
 		const stagedBinary = join(dir, 'bin', binaryName);
 		copyFileSync(source, stagedBinary);
 		chmodSync(stagedBinary, 0o755);
-		const base = {
-			name: platformPackageName(target.platform),
-			version: manifest.version,
-			description: `exa-cli compiled binary for ${target.platform}`,
-			license: manifest.license,
-			repository: manifest.repository,
-			os: [target.os],
-			cpu: [target.cpu],
-			files: ['bin'],
-		};
-		writeManifest(dir, 'libc' in target ? { ...base, libc: [target.libc] } : base);
-		staged.push({ dir, name: base.name, version: base.version });
+		writeFileSync(join(dir, 'package.json'), render(platformTemplate, { manifest, target }));
+		staged.push({ dir, name: `${manifest.name}-${target.platform}`, version: manifest.version });
 	}
 	return staged;
 }
@@ -79,25 +84,7 @@ export function stageUmbrella(outDir = 'dist/npm/umbrella'): StagedPackage {
 	for (const entry of ['skills', 'README.md', 'CHANGELOG.md', 'LICENSE']) {
 		cpSync(entry, join(outDir, entry), { recursive: true });
 	}
-	writeManifest(outDir, {
-		name: manifest.name,
-		version: manifest.version,
-		description: manifest.description,
-		license: manifest.license,
-		author: manifest.author,
-		type: 'module',
-		bin: { exa: './bin/exa.mjs' },
-		files: ['bin', 'skills', 'README.md', 'CHANGELOG.md', 'LICENSE'],
-		engines: { node: '>=20' },
-		publishConfig: manifest.publishConfig,
-		repository: manifest.repository,
-		homepage: manifest.homepage,
-		bugs: manifest.bugs,
-		keywords: manifest.keywords,
-		optionalDependencies: Object.fromEntries(
-			platforms.map((target) => [platformPackageName(target.platform), manifest.version]),
-		),
-	});
+	writeFileSync(join(outDir, 'package.json'), render(umbrellaTemplate, { manifest, platforms }));
 	return { dir: outDir, name: manifest.name, version: manifest.version };
 }
 
