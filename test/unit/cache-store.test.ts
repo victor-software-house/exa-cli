@@ -14,4 +14,25 @@ describe('CacheStore', () => {
 		expect(store.count()).toBe(0);
 		store.close();
 	});
+
+	test('prune deletes only expired entries and returns their count', () => {
+		const path = join(mkdtempSync(join(tmpdir(), 'exa-cli-')), 'cache.sqlite');
+		const store = new CacheStore(path);
+		store.set('fresh', '{}', 10_000);
+		store.set('stale', '{}', 1_000);
+		expect(store.prune(5, 10_000)).toBe(1);
+		expect(store.count()).toBe(1);
+		expect(store.get('fresh', 5, 10_000)?.body).toBe('{}');
+		store.close();
+	});
+
+	test('clear deletes all entries and returns their count', () => {
+		const path = join(mkdtempSync(join(tmpdir(), 'exa-cli-')), 'cache.sqlite');
+		const store = new CacheStore(path);
+		store.set('a', '{}');
+		store.set('b', '{}');
+		expect(store.clear()).toBe(2);
+		expect(store.count()).toBe(0);
+		store.close();
+	});
 });

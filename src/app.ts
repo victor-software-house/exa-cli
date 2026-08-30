@@ -5,6 +5,7 @@ import {
 	jsonStringField,
 	waitForAgentRun,
 } from '@cli/agent/wait';
+import { apiKeyDigest } from '@cli/cache/key';
 import { CacheStore, DEFAULT_TTL_SECONDS, defaultCachePath } from '@cli/cache/store';
 import {
 	answer,
@@ -84,6 +85,10 @@ async function dispatch(parsed: Parsed): Promise<void> {
 			runDoctor(value);
 			return Promise.resolve();
 		})
+		.with({ command: 'cache' }, (value) => {
+			runCache(value);
+			return Promise.resolve();
+		})
 		.with({ command: 'search' }, runSearch)
 		.with({ command: 'contents' }, runContents)
 		.with({ command: 'answer' }, runAnswer)
@@ -106,6 +111,22 @@ function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): void {
 	];
 	cache.close();
 	process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+function runCache(parsed: Extract<Parsed, { command: 'cache' }>): void {
+	const cache = new CacheStore(defaultCachePath());
+	try {
+		match(parsed.action)
+			.with('path', () => process.stdout.write(`${cache.path}\n`))
+			.with('clear', () => process.stdout.write(`cleared ${cache.clear()}\n`))
+			.with('prune', () => {
+				const ttlSeconds = parsed.ttl ?? DEFAULT_TTL_SECONDS;
+				process.stdout.write(`pruned ${cache.prune(ttlSeconds)}\n`);
+			})
+			.exhaustive();
+	} finally {
+		cache.close();
+	}
 }
 
 async function runSearch(parsed: Extract<Parsed, { command: 'search' }>): Promise<void> {
@@ -401,6 +422,7 @@ async function runOperation(options: {
 		const executed = await executeCached({
 			host,
 			operation: options.operation,
+			keyDigest: apiKeyDigest(apiKey),
 			body: parseJson(JSON.stringify(options.body)),
 			cache,
 			mode,

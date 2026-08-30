@@ -77,6 +77,16 @@ export class CacheStore {
 		return row.n;
 	}
 
+	prune(ttlSeconds: number, now = Date.now()): number {
+		return this.#db
+			.query<null, [number, number]>('DELETE FROM entries WHERE ? - created_at > ?')
+			.run(now, ttlSeconds * 1000).changes;
+	}
+
+	clear(): number {
+		return this.#db.query<null, []>('DELETE FROM entries').run().changes;
+	}
+
 	close(): void {
 		this.#db.close();
 	}

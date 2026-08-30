@@ -87,12 +87,12 @@ function globalFields() {
 			false,
 		),
 		pretty: withDefault(
-			flag('--pretty', { description: message`Write indented JSON to stdout.` }),
+			flag('--pretty', { description: message`Write indented JSON. Implies --json.` }),
 			false,
 		),
 		output: optional(
 			option('-o', '--output', path({ allowCreate: true, metavar: 'FILE' }), {
-				description: message`Write the payload to a file instead of stdout.`,
+				description: message`Write the payload as JSON to a file instead of stdout.`,
 			}),
 		),
 		timing: withDefault(
@@ -368,6 +368,17 @@ const doctorCommand = command(
 	}),
 );
 
+const cacheActionCommand = command(
+	'cache',
+	object({
+		command: constant('cache'),
+		...globalFields(),
+		action: argument(choice(['path', 'clear', 'prune']), {
+			description: message`Cache action: show the path, delete all entries, or delete expired entries.`,
+		}),
+	}),
+);
+
 export const parser = or(
 	searchCommand,
 	contentsCommand,
@@ -379,4 +390,5 @@ export const parser = or(
 	agentWaitCommand,
 	agentCancelCommand,
 	doctorCommand,
+	cacheActionCommand,
 );

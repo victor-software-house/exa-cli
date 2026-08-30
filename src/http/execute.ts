@@ -14,6 +14,7 @@ export type ExecuteResult = {
 export async function executeCached(options: {
 	host: string;
 	operation: string;
+	keyDigest: string;
 	body: JsonValue;
 	cache: CacheStore | undefined;
 	mode: CacheMode;
@@ -23,6 +24,7 @@ export async function executeCached(options: {
 	const key = cacheKey({
 		host: options.host,
 		operation: options.operation,
+		keyDigest: options.keyDigest,
 		body: options.body,
 	});
 	const cache = options.mode === 'off' ? undefined : options.cache;

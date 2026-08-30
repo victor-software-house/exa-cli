@@ -43,6 +43,15 @@ describe('parser', () => {
 		}
 	});
 
+	test('parses cache with an action', () => {
+		const result = parse(parser, ['cache', 'prune', '--ttl', '60']);
+		expect(result.success).toBe(true);
+		if (result.success && result.value.command === 'cache') {
+			expect(result.value.action).toBe('prune');
+			expect(result.value.ttl).toBe(60);
+		}
+	});
+
 	test('parses agent-get with a run id', () => {
 		const result = parse(parser, [
 			'agent-get',
