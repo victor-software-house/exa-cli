@@ -7,6 +7,8 @@ export default defineConfig({
 	ignorePatterns: [
 		'src/generated/**',
 		'dist/**',
+		// bin/exa.mjs is plain JS for Node 20 consumers; type-aware rules have no info there.
+		'bin/**',
 		'vendor/**',
 		'.agents/**',
 		'.claude/**',

@@ -2,7 +2,7 @@
 //MISE description="Cross-compile standalone binaries into mise-autodetectable archives"
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { $ } from 'bun';
 
@@ -38,6 +38,10 @@ export async function compileArchives(): Promise<void> {
 		const binaryName = target.kind === 'zip' ? 'exa.exe' : 'exa';
 		const compiled = join(workDir, binaryName);
 		await $`bun build --compile --target=${target.bunTarget} --outfile=${compiled} src/cli.ts`;
+
+		const rawDir = join(outDir, 'raw', target.platform);
+		mkdirSync(rawDir, { recursive: true });
+		copyFileSync(compiled, join(rawDir, binaryName));
 
 		const archiveName =
 			target.kind === 'zip' ? `exa-${target.platform}.exe.zip` : `exa-${target.platform}.tar.gz`;

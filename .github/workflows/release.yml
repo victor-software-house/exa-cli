@@ -89,13 +89,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Mint npm OIDC token
+      - name: Compile binaries for npm staging
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: mise run release:oidc
+        run: mise run compile
 
       - name: Publish
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: mise run release
+
+      - name: Smoke npm distribution
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: mise run release:smoke
 
       - name: Tag and create GitHub Release
         if: steps.changesets.outputs.hasChangesets == 'false'

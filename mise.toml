@@ -75,8 +75,8 @@ outputs = ["dist/**"]
 run = "tsdown"
 
 [tasks.pack]
-description = "Dry-run package contents"
-run = "bun pm pack --dry-run"
+description = "Dry-run the staged umbrella package contents"
+run = "bun mise-tasks/release/npm-staging.ts --umbrella-only && cd dist/npm/umbrella && bun pm pack --dry-run"
 
 [tasks.commitlint]
 description = "Conventional commit lint"
