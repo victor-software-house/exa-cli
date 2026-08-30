@@ -14,7 +14,8 @@ Public Exa CLI. This is not the infer-lab aggregator.
 | `src/http/` | Hey API client wrapper |
 | `src/output/` | stdout/stderr presenter |
 | `src/generated/` | OpenAPI output — regenerate, do not edit |
-| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release`, `release:oidc`, `release:tags`, `release:binaries`, `release:versioned-binaries`). `schema:generate` is the one-liner in `mise.toml`. |
+| `bin/exa.mjs` | Published Node launcher; resolves the platform binary package and execs it. Plain JS, oxlint-ignored |
+| `mise-tasks/` | Bun file tasks (`schema:check`, `compile`, `version-guard`, `release`, `release:npm-staging`, `release:smoke`, `release:tags`, `release:binaries`, `release:versioned-binaries`). `schema:generate` is the one-liner in `mise.toml`. |
 | `vendor/exa-openapi.yaml` | SHA-pinned Exa spec |
 | `skills/exa/` | skills.sh skill |
 
@@ -22,7 +23,8 @@ Public Exa CLI. This is not the infer-lab aggregator.
 
 - Generated HTTP types live in `src/generated/`. Run `mise run schema:generate` after bumping `vendor/PIN.md`. Never hand-edit generated files.
 - `--request` is JSON text for that command’s generated body schema (`zSearchBody` / `zGetContentsBody` / `zAnswerBody` / `zFindSimilarBody` / `zGetContextBody` / `zCreateAgentRunBody`). The matching input types are `SearchBody` / `GetContentsBody` / `AnswerBody` / `FindSimilarBody` / `GetContextBody` / `CreateAgentRunBody`. Optique `@optique/zod` parses it. Hey API’s SDK `validator: true` is the HTTP boundary on the same schemas. There is no Hey API ↔ Optique plugin; the generated Zod is the shared contract. The TypeScript plugin does not emit a standalone body type for inline operation bodies — only `SearchData` with an inline `body`. Do not write `SearchData['body']` in app code except at the SDK call, where Zod input and Hey API optional keys diverge under `exactOptionalPropertyTypes`.
-- Cache defaults on for search, contents, answer, similar, and context. Agent create/get/wait/cancel never cache: create is not idempotent; get and wait poll; cancel mutates. `--refresh` skips reads. `--no-cache` skips reads and writes. Key is SHA-256 of canonical `{ host, operation, body }`.
+- Output resolution is flags-only: `pretty → 'pretty'`; `json || output !== undefined → 'json'`; otherwise `text`, even piped. No TTY or extension sniffing for format; `-o` always writes JSON. TTY survives only as the color default.
+- Cache defaults on for search, contents, answer, similar, and context. Agent create/get/wait/cancel and `cache`/`doctor` never cache: create is not idempotent; get and wait poll; cancel mutates. `--refresh` skips reads. `--no-cache` skips reads and writes. Key is SHA-256 of canonical `{ host, operation, keyDigest, body }` where `keyDigest` is a truncated SHA-256 of the API key — cached responses are never shared between accounts. `exa cache path|clear|prune` manages the store.
 - `import "zod/compile"` (and bunfig `preload`) AOT-compiles schemas on first parse for speed. It does not shrink the binary. `z.coerce` flag parsers stay on the runtime path.
 - TypeScript 7 (`typescript@7.0.2`) and Node 26. `tsc` is the native TS 7 binary. Pin `@hey-api/openapi-ts` to the `@next` snapshot (`0.0.0-next-20260824173136`) until stable ships the TypeScript-compiler-API removal. Do not use `0.99.0` — it reads `ts.SyntaxKind` from the package root, which TypeScript 7 does not export.
 - Generated files get `// @ts-nocheck` via `output.header`. The client uses Hey API `auth()` for `x-api-key`, `throwOnError: true`, and SDK `responseStyle: 'data'`. Do not unwrap `{ data, error }` envelopes or stamp generated files after the fact.
@@ -37,7 +39,9 @@ mise run schema:check    # generate, then fail if src/generated drifted
 mise -E test run test:live  # paid Exa calls; skips without EXA_API_KEY
 ```
 
-mise is the task runner. `package.json` has no task scripts except `prepublishOnly`. Task bodies that are more than a one-liner live in `mise-tasks/*.ts`.
+mise is the task runner. `package.json` has no scripts — publishes run from staging dirs, so there is no `prepublishOnly`. Task bodies that are more than a one-liner live in `mise-tasks/*.ts`.
+
+The committed `package.json` must not carry `optionalDependencies` on the platform packages — the exact pins only exist after a publish and would break `bun install` during development. `npm` itself cannot run inside the repo: `devEngines.packageManager` is bun, so npm exits with EBADDEVENGINES. Use `bun` or `curl` for registry queries.
 
 ## Secrets and mise envs
 
@@ -61,11 +65,11 @@ mise env --json | jq 'keys'
 
 ## Release discipline
 
-Versioning is changeset-driven. Publish is bun-release (`mise run release:oidc`,
-then `bun publish --access public --tolerate-republish`, then `mise run release:tags`).
-Never `changeset publish`. Never `publish:` on `changesets/action`.
+Versioning is changeset-driven. Publish is `mise run release`: it stages npm manifests (`mise-tasks/release/npm-staging.ts`), mints a per-package OIDC token with bun-release, and publishes the six `@victor-software-house/exa-cli-<platform>` packages, then the launcher umbrella last — `optionalDependencies` in the staged umbrella reference platform versions that must exist first. `release:smoke` installs the umbrella in isolation and runs `exa --version`; then `release:tags` tags only the umbrella `v$version` (platform packages get no git tags). Never `changeset publish`. Never `publish:` on `changesets/action`.
 
-Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes. Versioned GitHub Releases (`v$version`) get the same six archives plus SHA256SUMS after `release:tags`, not from the rolling binaries job.
+Every `main` push compiles all six platform archives on `ubuntu-24.04` (`bun build --compile --target=…`) and create-or-clobbers GitHub Release `v0.0.0`. Raw binaries also land in `dist/binaries/raw/<platform>/` for npm staging. mise consumers pin `"github:victor-software-house/exa-cli" = "0.0.0"` and refresh the lock when they want new bytes. Versioned GitHub Releases (`v$version`) get the same six archives plus SHA256SUMS after `release:tags`, not from the rolling binaries job.
+
+The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/cpu/libc-selected platform package and execs its binary. No `exports`, no published `dist`. New platform packages need a one-time bootstrap before CI can publish them: publish each once locally from its staging dir, then `npm trust github @victor-software-house/exa-cli-<platform> --repository victor-software-house/exa-cli --file release.yml --allow-publish --yes` (run npm outside the repo).
 
 1. First published npm version is **`0.0.0`**. No changeset until that is live. The first changeset is a patch to `0.0.1`. Default bump is `patch`.
 2. `changesets/action` opens a **Version Packages** PR (version only). Operator merges it → CI mints `BUN_CONFIG_TOKEN`, publishes with bun, tags, then uploads versioned binaries.
