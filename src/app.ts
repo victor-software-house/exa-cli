@@ -61,7 +61,7 @@ type Parsed = Awaited<ReturnType<typeof runAppParse>>;
 async function runAppParse(args?: readonly string[]) {
 	const options = {
 		programName: 'exa',
-		brief: message`CLI for Exa search, contents, answer, similar, context, and agent.`,
+		brief: message`Agent-friendly CLI for the Exa API with a local request cache.`,
 		help: 'both' as const,
 		version,
 		completion: 'both' as const,

@@ -1,6 +1,6 @@
 # @victor-software-house/exa-cli
 
-Public CLI for [Exa](https://exa.ai/) search, contents, answer, similar, context, and agent.
+Agent-friendly CLI for the [Exa](https://exa.ai/) API: search, contents, answer, similar, context, and agent runs, backed by a local SQLite request cache.
 
 ## Install
 
