@@ -1,31 +1,33 @@
 import { describe, expect, test } from 'bun:test';
-import { formatPayload, resolveMode } from '@cli/output/presenter';
+import { formatPayload, type PresenterOptions, resolveMode } from '@cli/output/presenter';
+
+const base = {
+	json: false,
+	pretty: false,
+	output: undefined,
+	stdoutIsTTY: false,
+	noColor: false,
+	forceColor: false,
+} satisfies PresenterOptions;
 
 describe('resolveMode', () => {
-	test('uses json when stdout is not a TTY', () => {
-		expect(
-			resolveMode({
-				json: false,
-				pretty: false,
-				output: undefined,
-				stdoutIsTTY: false,
-				noColor: false,
-				forceColor: false,
-			}),
-		).toBe('json');
+	test('defaults to text, even when stdout is not a TTY', () => {
+		expect(resolveMode({ ...base, stdoutIsTTY: false })).toBe('text');
+		expect(resolveMode({ ...base, stdoutIsTTY: true })).toBe('text');
 	});
 
-	test('uses pretty when requested on a TTY', () => {
-		expect(
-			resolveMode({
-				json: false,
-				pretty: true,
-				output: undefined,
-				stdoutIsTTY: true,
-				noColor: false,
-				forceColor: false,
-			}),
-		).toBe('pretty');
+	test('uses pretty when requested, in a pipe or with --output', () => {
+		expect(resolveMode({ ...base, pretty: true })).toBe('pretty');
+		expect(resolveMode({ ...base, pretty: true, output: 'r.json' })).toBe('pretty');
+	});
+
+	test('pretty beats json', () => {
+		expect(resolveMode({ ...base, json: true, pretty: true })).toBe('pretty');
+	});
+
+	test('uses json for --json or --output', () => {
+		expect(resolveMode({ ...base, json: true })).toBe('json');
+		expect(resolveMode({ ...base, output: 'r.md' })).toBe('json');
 	});
 });
 

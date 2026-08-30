@@ -20,12 +20,12 @@ export function resolveMode(options: PresenterOptions): OutputMode {
 	return match(options)
 		.returnType<OutputMode>()
 		.when(
-			(value) => value.json || value.output?.endsWith('.json') === true || !value.stdoutIsTTY,
-			() => 'json',
-		)
-		.when(
 			(value) => value.pretty,
 			() => 'pretty',
+		)
+		.when(
+			(value) => value.json || value.output !== undefined,
+			() => 'json',
 		)
 		.otherwise(() => 'text');
 }
