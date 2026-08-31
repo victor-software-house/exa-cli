@@ -3,17 +3,11 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-	type CommandOptions,
-	type CommandOutcome,
-	type CommandRunner,
-	runCommand,
-} from '@cli/credentials/command';
-import { deleteCredential, readCredential, writeCredential } from '@cli/credentials/store';
-
-type Call = {
-	command: readonly string[];
-	options: CommandOptions | undefined;
-};
+	type CredentialEntryFactory,
+	deleteCredential,
+	readCredential,
+	writeCredential,
+} from '@cli/credentials/store';
 
 const tempDirs: string[] = [];
 
@@ -23,102 +17,128 @@ afterEach(() => {
 	}
 });
 
-function queuedRunner(...outcomes: CommandOutcome[]) {
-	const calls: Call[] = [];
-	const run: CommandRunner = (command, options) => {
-		calls.push({ command, options });
-		const outcome = outcomes.shift();
-		if (outcome === undefined) {
-			throw new Error('No queued command outcome.');
-		}
-		return Promise.resolve(outcome);
-	};
-	return { run, calls };
-}
-
 function tempPath(): string {
 	const directory = mkdtempSync(join(tmpdir(), 'exa-credential-test-'));
 	tempDirs.push(directory);
 	return join(directory, 'credentials.json');
 }
 
+/** Stands in for `@napi-rs/keyring`'s Entry so tests never touch a real store. */
+function fakeStore(options: { initial?: string | null; throws?: Error } = {}) {
+	let value = options.initial ?? null;
+	const opened: Array<readonly [string, string]> = [];
+	const factory: CredentialEntryFactory = (service, account) => {
+		opened.push([service, account]);
+		return {
+			getPassword: () => {
+				if (options.throws !== undefined) {
+					throw options.throws;
+				}
+				return value;
+			},
+			setPassword: (secret) => {
+				if (options.throws !== undefined) {
+					throw options.throws;
+				}
+				value = secret;
+			},
+			deletePassword: () => {
+				if (options.throws !== undefined) {
+					throw options.throws;
+				}
+				if (value === null) {
+					return false;
+				}
+				value = null;
+				return true;
+			},
+		};
+	};
+	return { factory, opened, current: () => value };
+}
+
 describe('credential store', () => {
-	test('does not mistake a normal nonzero exit for a timeout', async () => {
-		expect(await runCommand([process.execPath, '-e', 'process.exit(44)'])).toEqual({
-			kind: 'exited',
-			exitCode: 44,
-			stdout: '',
-		});
+	test('addresses one stable service and account', async () => {
+		const store = fakeStore();
+
+		await writeCredential('key', { platform: 'darwin', entry: store.factory });
+
+		expect(store.opened).toEqual([['exa-cli', 'default']]);
 	});
 
-	test('writes a macOS key without exposing it in argv', async () => {
+	test('round-trips a key and names the platform backend', async () => {
+		const cases = [
+			{ platform: 'darwin', backend: 'keychain' },
+			{ platform: 'linux', backend: 'secret-service' },
+			{ platform: 'win32', backend: 'credential-manager' },
+		] as const;
+
+		for (const { platform, backend } of cases) {
+			const store = fakeStore();
+			const written = await writeCredential('stored-key', { platform, entry: store.factory });
+			expect(written).toEqual({ kind: 'ok', backend });
+
+			expect(
+				await readCredential({ platform, entry: store.factory, filePath: tempPath() }),
+			).toEqual({ kind: 'found', secret: 'stored-key', backend });
+		}
+	});
+
+	test('preserves a key that shell quoting would have mangled', async () => {
 		const secret = `test "double" 'single' \\ slash`;
-		const { run, calls } = queuedRunner({ kind: 'exited', exitCode: 0, stdout: '' });
+		const store = fakeStore();
 
-		const result = await writeCredential(secret, { platform: 'darwin', run });
+		await writeCredential(secret, { platform: 'darwin', entry: store.factory });
 
-		expect(result).toEqual({ kind: 'ok', backend: 'keychain' });
-		expect(calls).toHaveLength(1);
-		expect(calls[0]?.command).toEqual(['/usr/bin/security', '-i']);
-		expect(calls[0]?.command.join(' ')).not.toContain(secret);
-		expect(calls[0]?.options?.stdin).toContain(Buffer.from(secret).toString('hex').toUpperCase());
-		expect(calls[0]?.options?.stdin).not.toContain(secret);
+		expect(store.current()).toBe(secret);
 	});
 
-	test('reads the macOS key and identifies its backend', async () => {
-		const { run } = queuedRunner({ kind: 'exited', exitCode: 0, stdout: 'stored-key\n' });
-
-		expect(await readCredential({ platform: 'darwin', run, filePath: tempPath() })).toEqual({
-			kind: 'found',
-			secret: 'stored-key',
-			backend: 'keychain',
-		});
-	});
-
-	test('sends a Linux key through stdin', async () => {
-		const { run, calls } = queuedRunner({ kind: 'exited', exitCode: 0, stdout: '' });
-
-		expect(await writeCredential('linux-key', { platform: 'linux', run })).toEqual({
-			kind: 'ok',
-			backend: 'secret-service',
-		});
-		expect(calls[0]?.command.join(' ')).not.toContain('linux-key');
-		expect(calls[0]?.options?.stdin).toBe('linux-key');
-	});
-
-	test('sends a Windows key through stdin to a constant encoded script', async () => {
-		const { run, calls } = queuedRunner({ kind: 'exited', exitCode: 0, stdout: '' });
+	test('reports an empty store as absent, not as a key', async () => {
+		const store = fakeStore({ initial: null });
 
 		expect(
-			await writeCredential('windows-key', {
-				platform: 'win32',
-				run,
-				dpapiPath: 'C:\\credentials\\exa.dpapi',
-			}),
-		).toEqual({ kind: 'ok', backend: 'dpapi' });
-		expect(calls[0]?.command.join(' ')).not.toContain('windows-key');
-		expect(calls[0]?.options?.stdin).toBe('windows-key');
-		expect(calls[0]?.options?.env?.['EXA_CREDENTIAL_PATH']).toBe('C:\\credentials\\exa.dpapi');
+			await readCredential({ platform: 'darwin', entry: store.factory, filePath: tempPath() }),
+		).toEqual({ kind: 'absent' });
+	});
+
+	test('surfaces a locked store as unavailable with a platform hint', async () => {
+		const store = fakeStore({ throws: new Error('access denied') });
+
+		expect(
+			await readCredential({ platform: 'linux', entry: store.factory, filePath: tempPath() }),
+		).toEqual({
+			kind: 'unavailable',
+			reason: 'access denied No D-Bus session, or the keyring is locked.',
+		});
+	});
+
+	test('refuses platforms with no credential store', async () => {
+		expect(await writeCredential('key', { platform: 'freebsd' })).toEqual({
+			kind: 'unavailable',
+			reason: 'No credential store for platform freebsd.',
+		});
 	});
 
 	test('fails closed unless plaintext storage is explicitly allowed', async () => {
 		const path = tempPath();
-		const unavailable: CommandOutcome = { kind: 'missing' };
-		const first = queuedRunner(unavailable);
-		const second = queuedRunner(unavailable);
+		const store = fakeStore({ throws: new Error('no keyring') });
 
 		expect(
-			await writeCredential('file-key', { platform: 'linux', run: first.run, filePath: path }),
+			await writeCredential('file-key', {
+				platform: 'linux',
+				entry: store.factory,
+				filePath: path,
+			}),
 		).toEqual({
 			kind: 'unavailable',
-			reason: 'secret-tool is unavailable.',
+			reason: 'no keyring No D-Bus session, or the keyring is locked.',
 		});
 		expect(() => readFileSync(path)).toThrow();
 
 		expect(
 			await writeCredential('file-key', {
 				platform: 'linux',
-				run: second.run,
+				entry: store.factory,
 				filePath: path,
 				allowFile: true,
 			}),
@@ -128,50 +148,41 @@ describe('credential store', () => {
 
 	test('reads and deletes the explicit file fallback', async () => {
 		const path = tempPath();
-		const write = queuedRunner({ kind: 'missing' });
+		const store = fakeStore({ throws: new Error('no keyring') });
 		await writeCredential('file-key', {
 			platform: 'linux',
-			run: write.run,
+			entry: store.factory,
 			filePath: path,
 			allowFile: true,
 		});
-		const read = queuedRunner({ kind: 'missing' });
 
-		expect(await readCredential({ platform: 'linux', run: read.run, filePath: path })).toEqual({
-			kind: 'found',
-			secret: 'file-key',
-			backend: 'file',
-		});
+		expect(
+			await readCredential({ platform: 'linux', entry: store.factory, filePath: path }),
+		).toEqual({ kind: 'found', secret: 'file-key', backend: 'file' });
 
-		const remove = queuedRunner({ kind: 'missing' });
-		expect(await deleteCredential({ platform: 'linux', run: remove.run, filePath: path })).toEqual({
-			kind: 'ok',
-		});
+		expect(
+			await deleteCredential({ platform: 'linux', entry: store.factory, filePath: path }),
+		).toEqual({ kind: 'ok' });
 		expect(() => readFileSync(path)).toThrow();
 	});
 
-	test('distinguishes absence from a helper timeout', async () => {
-		const absent = queuedRunner({ kind: 'exited', exitCode: 44, stdout: '' });
-		const timeout = queuedRunner({ kind: 'timeout' });
+	test('reports deleting an empty store as absent', async () => {
+		const store = fakeStore({ initial: null });
 
 		expect(
-			await readCredential({ platform: 'darwin', run: absent.run, filePath: tempPath() }),
+			await deleteCredential({ platform: 'darwin', entry: store.factory, filePath: tempPath() }),
 		).toEqual({ kind: 'absent' });
-		expect(
-			await readCredential({ platform: 'darwin', run: timeout.run, filePath: tempPath() }),
-		).toEqual({
-			kind: 'unavailable',
-			reason: 'The keychain did not respond.',
-		});
 	});
 
-	test('rejects malformed keys before invoking a helper', async () => {
-		const { run, calls } = queuedRunner();
+	test('rejects malformed keys before opening the store', async () => {
+		const store = fakeStore();
 
-		expect(await writeCredential('line one\nline two', { platform: 'darwin', run })).toEqual({
+		expect(
+			await writeCredential('line one\nline two', { platform: 'darwin', entry: store.factory }),
+		).toEqual({
 			kind: 'unavailable',
 			reason: 'The API key must not contain newlines or null bytes.',
 		});
-		expect(calls).toHaveLength(0);
+		expect(store.opened).toHaveLength(0);
 	});
 });

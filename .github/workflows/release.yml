@@ -20,7 +20,97 @@ env:
   MISE_IGNORED_CONFIG_PATHS: ~/.config/mise/config.toml
 
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: false
+          cache: true
+
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install mise tools
+        run: mise install --locked
+
+      - name: Verify repository
+        run: mise run verify
+
+  # The native credential addon is only embedded when the build host matches the
+  # target, so each platform compiles on its own runner. All of these labels are
+  # free for public repositories.
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            runner: macos-latest
+          - platform: darwin-x64
+            runner: macos-15-intel
+          - platform: linux-x64
+            runner: ubuntu-24.04
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Set up mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: false
+          cache: true
+
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install mise tools
+        run: mise install --locked
+
+      - name: Compile ${{ matrix.platform }}
+        run: mise run compile:binary ${{ matrix.platform }}
+
+      - name: Upload ${{ matrix.platform }} binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/binaries/raw/${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  # musl needs a musl host: bun install resolves the addon by libc, and a glibc
+  # runner would silently leave the musl binary without it.
+  build-musl:
+    needs: verify
+    runs-on: ubuntu-24.04
+    container: oven/bun:1.4.0-alpine
+    steps:
+      - name: Install checkout prerequisites
+        run: apk add --no-cache git
+
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compile linux-x64-musl
+        run: bun mise-tasks/compile/binary.ts linux-x64-musl
+
+      - name: Upload linux-x64-musl binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-x64-musl
+          path: dist/binaries/raw/linux-x64-musl/
+          if-no-files-found: error
+          retention-days: 1
+
   binaries:
+    needs: [build, build-musl]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -40,11 +130,13 @@ jobs:
       - name: Install mise tools
         run: mise install --locked
 
-      - name: Verify repository
-        run: mise run verify
+      - name: Download platform binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/binaries/raw
 
-      - name: Compile binaries
-        run: mise run compile
+      - name: Package archives
+        run: mise run compile:archives
 
       - name: Upload rolling v0.0.0 binaries
         env:
@@ -52,6 +144,7 @@ jobs:
         run: mise run release:binaries
 
   changesets:
+    needs: [build, build-musl]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -72,9 +165,6 @@ jobs:
 
       - name: Install mise tools
         run: mise install --locked
-
-      - name: Pre-publish gates
-        run: mise run verify
 
       - name: Pack dry-run
         run: mise run pack
@@ -101,9 +191,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Compile binaries for npm staging
+      - name: Download platform binaries
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: mise run compile
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/binaries/raw
 
       - name: Publish
         if: steps.changesets.outputs.hasChangesets == 'false'

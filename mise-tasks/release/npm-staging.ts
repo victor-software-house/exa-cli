@@ -86,7 +86,9 @@ export function stagePlatforms(outDir = 'dist/npm', rawDir = 'dist/binaries/raw'
 		const binaryName = target.os === 'win32' ? 'exa.exe' : 'exa';
 		const source = join(rawDir, target.platform, binaryName);
 		if (!existsSync(source)) {
-			throw new Error(`missing compiled binary: ${source} (run mise run compile first)`);
+			throw new Error(
+				`missing compiled binary: ${source} (built per platform by mise run compile:binary)`,
+			);
 		}
 		const dir = join(outDir, target.platform);
 		rmSync(dir, { recursive: true, force: true });

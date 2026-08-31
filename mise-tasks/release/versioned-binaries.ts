@@ -5,7 +5,7 @@
 import { stderr, stdout } from 'node:process';
 import { version } from '@pkg' with { type: 'json' };
 import { thisCommitBumpedVersion } from 'bun-release';
-import { compileArchives } from '../compile';
+import { packageArchives } from '../compile/archives';
 import { requireReleaseArchives, upload } from './binaries';
 
 if (!(await thisCommitBumpedVersion(version))) {
@@ -24,5 +24,5 @@ if (view.exitCode !== 0) {
 	process.exit(1);
 }
 
-await compileArchives();
+await packageArchives();
 upload(tag, await requireReleaseArchives());

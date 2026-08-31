@@ -3,7 +3,7 @@
 
 import { join } from 'node:path';
 import { stderr } from 'node:process';
-import { archiveNames } from '../compile';
+import { archiveNames } from '../compile/binary';
 
 const rollingTag = 'v0.0.0';
 const outDir = 'dist/binaries';

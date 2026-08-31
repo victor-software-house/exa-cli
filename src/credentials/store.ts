@@ -1,7 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { type CommandRunner, runCommand } from '@cli/credentials/command';
 import { env } from '@cli/env';
 import { parseJson } from '@cli/json';
 import { match } from 'ts-pattern';
@@ -13,13 +12,13 @@ const credentialFileSchema = z.object({
 
 const SERVICE = 'exa-cli';
 const ACCOUNT = 'default';
-const LABEL = 'Exa CLI API key';
-const MACOS_SECURITY = '/usr/bin/security';
 
-/** `security` and our PowerShell scripts both use 44 for "no such item". */
-const NOT_FOUND_EXIT = 44;
-
-export type CredentialBackend = 'keychain' | 'secret-service' | 'dpapi' | 'file' | 'none';
+export type CredentialBackend =
+	| 'keychain'
+	| 'secret-service'
+	| 'credential-manager'
+	| 'file'
+	| 'none';
 
 export type CredentialLookup =
 	| { readonly kind: 'found'; readonly secret: string; readonly backend: CredentialBackend }
@@ -31,19 +30,29 @@ export type CredentialChange =
 	| { readonly kind: 'absent' }
 	| { readonly kind: 'unavailable'; readonly reason: string };
 
+/**
+ * The subset of `@napi-rs/keyring`'s Entry that we use. Declaring it here keeps
+ * the tests off the real credential store.
+ */
+export type CredentialEntry = {
+	getPassword(): string | null;
+	setPassword(secret: string): void;
+	deletePassword(): boolean;
+};
+
+export type CredentialEntryFactory = (service: string, account: string) => CredentialEntry;
+
 export type StoreOptions = {
 	readonly platform?: NodeJS.Platform;
-	readonly run?: CommandRunner;
+	readonly entry?: CredentialEntryFactory;
 	readonly allowFile?: boolean;
 	readonly filePath?: string;
-	readonly dpapiPath?: string;
 };
 
 /**
- * A newline would be indistinguishable from the record separator that
- * `secret-tool` and `git credential` use, and would be silently absorbed by
- * `security find-generic-password -w`. Reject it at the boundary instead of
- * storing something we cannot read back byte-for-byte.
+ * A key that survives a round trip but still carries a stray newline is nearly
+ * always a bad paste. Reject it here so the failure names the cause instead of
+ * surfacing later as an opaque 401.
  */
 export function invalidSecretReason(secret: string): string | undefined {
 	if (secret === '') {
@@ -60,15 +69,15 @@ export function backendFor(platform: NodeJS.Platform = process.platform): Creden
 		.returnType<CredentialBackend>()
 		.with('darwin', () => 'keychain')
 		.with('linux', () => 'secret-service')
-		.with('win32', () => 'dpapi')
+		.with('win32', () => 'credential-manager')
 		.otherwise(() => 'none');
 }
 
 export function describeBackend(backend: CredentialBackend): string {
 	return match(backend)
 		.with('keychain', () => 'macOS Keychain')
-		.with('secret-service', () => 'Secret Service (secret-tool)')
-		.with('dpapi', () => 'Windows DPAPI encrypted file')
+		.with('secret-service', () => 'Secret Service')
+		.with('credential-manager', () => 'Windows Credential Manager')
 		.with('file', () => 'plaintext file')
 		.with('none', () => 'unsupported platform')
 		.exhaustive();
@@ -84,62 +93,62 @@ export function credentialFilePath(): string {
 	return join(homedir(), '.config', 'exa-cli', 'credentials.json');
 }
 
-function dpapiPath(): string {
-	if (env.APPDATA !== undefined) {
-		return join(env.APPDATA, 'exa-cli', 'credential.dpapi');
+/**
+ * The addon is embedded per target by `bun build --compile`, so a load failure
+ * means the binary was built for the wrong platform. Degrade to a reason string
+ * rather than taking down commands that never touch stored credentials.
+ */
+async function loadEntryFactory(): Promise<CredentialEntryFactory | undefined> {
+	try {
+		const { Entry } = await import('@napi-rs/keyring');
+		return (service, account) => new Entry(service, account);
+	} catch {
+		return undefined;
 	}
-	return join(homedir(), '.config', 'exa-cli', 'credential.dpapi');
+}
+
+async function openEntry(
+	options: StoreOptions,
+): Promise<{ readonly entry: CredentialEntry } | { readonly reason: string }> {
+	const backend = backendFor(options.platform);
+	if (backend === 'none') {
+		return { reason: `No credential store for platform ${options.platform ?? process.platform}.` };
+	}
+	const factory = options.entry ?? (await loadEntryFactory());
+	if (factory === undefined) {
+		return { reason: 'The credential store addon is unavailable in this build.' };
+	}
+	return { entry: factory(SERVICE, ACCOUNT) };
 }
 
 /**
- * PowerShell scripts are constant text passed through -EncodedCommand, so no
- * caller value is ever interpolated into a script. The target path arrives as
- * an environment variable and the secret arrives on stdin.
+ * The addon throws for every backend failure — a locked keychain, a missing
+ * D-Bus session — so this is the one place those become reason strings.
  */
-const DPAPI_READ = `
-$ErrorActionPreference = 'Stop'
-if (-not (Test-Path -LiteralPath $env:EXA_CREDENTIAL_PATH)) { exit ${NOT_FOUND_EXIT} }
-$secure = Get-Content -Raw -LiteralPath $env:EXA_CREDENTIAL_PATH | ConvertTo-SecureString
-$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-try { [Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)) }
-finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-`;
-
-const DPAPI_WRITE = `
-$ErrorActionPreference = 'Stop'
-$plain = [Console]::In.ReadToEnd()
-$secure = ConvertTo-SecureString $plain -AsPlainText -Force
-$dir = Split-Path -Parent $env:EXA_CREDENTIAL_PATH
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
-ConvertFrom-SecureString $secure |
-  Set-Content -NoNewline -Encoding ascii -LiteralPath $env:EXA_CREDENTIAL_PATH
-`;
-
-const DPAPI_DELETE = `
-$ErrorActionPreference = 'Stop'
-if (-not (Test-Path -LiteralPath $env:EXA_CREDENTIAL_PATH)) { exit ${NOT_FOUND_EXIT} }
-Remove-Item -LiteralPath $env:EXA_CREDENTIAL_PATH -Force
-`;
-
-function powershell(script: string): readonly string[] {
-	const encoded = Buffer.from(script, 'utf16le').toString('base64');
-	return ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded];
+function attempt<T>(
+	backend: CredentialBackend,
+	action: () => T,
+): { readonly ok: T } | { readonly reason: string } {
+	try {
+		return { ok: action() };
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error);
+		const hint = match(backend)
+			.with('keychain', () => 'The keychain may be locked.')
+			.with('secret-service', () => 'No D-Bus session, or the keyring is locked.')
+			.with('credential-manager', () => 'Credential Manager rejected the request.')
+			.otherwise(() => '');
+		return { reason: hint === '' ? detail : `${detail} ${hint}` };
+	}
 }
 
 export async function readCredential(options: StoreOptions = {}): Promise<CredentialLookup> {
 	const backend = backendFor(options.platform);
-	const run = options.run ?? runCommand;
-	const native = await match(backend)
-		.returnType<Promise<CredentialLookup>>()
-		.with('keychain', () => readKeychain(run))
-		.with('secret-service', () => readSecretService(run))
-		.with('dpapi', () => readDpapi(run, options.dpapiPath))
-		.otherwise(() =>
-			Promise.resolve<CredentialLookup>({
-				kind: 'unavailable',
-				reason: `No credential store for platform ${options.platform ?? process.platform}.`,
-			}),
-		);
+	const opened = await openEntry(options);
+	const native: CredentialLookup =
+		'reason' in opened
+			? { kind: 'unavailable', reason: opened.reason }
+			: readEntry(opened.entry, backend);
 	if (native.kind === 'found') {
 		return native;
 	}
@@ -148,6 +157,17 @@ export async function readCredential(options: StoreOptions = {}): Promise<Creden
 		return file;
 	}
 	return native;
+}
+
+function readEntry(entry: CredentialEntry, backend: CredentialBackend): CredentialLookup {
+	const outcome = attempt(backend, () => entry.getPassword());
+	if ('reason' in outcome) {
+		return { kind: 'unavailable', reason: outcome.reason };
+	}
+	if (outcome.ok === null || outcome.ok === '') {
+		return { kind: 'absent' };
+	}
+	return { kind: 'found', secret: outcome.ok, backend };
 }
 
 export async function writeCredential(
@@ -159,18 +179,11 @@ export async function writeCredential(
 		return { kind: 'unavailable', reason };
 	}
 	const backend = backendFor(options.platform);
-	const run = options.run ?? runCommand;
-	const native = await match(backend)
-		.returnType<Promise<CredentialChange>>()
-		.with('keychain', () => writeKeychain(run, secret))
-		.with('secret-service', () => writeSecretService(run, secret))
-		.with('dpapi', () => writeDpapi(run, secret, options.dpapiPath))
-		.otherwise(() =>
-			Promise.resolve<CredentialChange>({
-				kind: 'unavailable',
-				reason: `No credential store for platform ${options.platform ?? process.platform}.`,
-			}),
-		);
+	const opened = await openEntry(options);
+	const native: CredentialChange =
+		'reason' in opened
+			? { kind: 'unavailable', reason: opened.reason }
+			: writeEntry(opened.entry, secret, backend);
 	if (native.kind === 'ok') {
 		return { kind: 'ok', backend };
 	}
@@ -181,15 +194,24 @@ export async function writeCredential(
 	return file.kind === 'ok' ? { kind: 'ok', backend: 'file' } : file;
 }
 
+function writeEntry(
+	entry: CredentialEntry,
+	secret: string,
+	backend: CredentialBackend,
+): CredentialChange {
+	const outcome = attempt(backend, () => {
+		entry.setPassword(secret);
+	});
+	return 'reason' in outcome ? { kind: 'unavailable', reason: outcome.reason } : { kind: 'ok' };
+}
+
 export async function deleteCredential(options: StoreOptions = {}): Promise<CredentialChange> {
 	const backend = backendFor(options.platform);
-	const run = options.run ?? runCommand;
-	const native = await match(backend)
-		.returnType<Promise<CredentialChange>>()
-		.with('keychain', () => deleteKeychain(run))
-		.with('secret-service', () => deleteSecretService(run))
-		.with('dpapi', () => deleteDpapi(run, options.dpapiPath))
-		.otherwise(() => Promise.resolve<CredentialChange>({ kind: 'absent' }));
+	const opened = await openEntry(options);
+	const native: CredentialChange =
+		'reason' in opened
+			? { kind: 'unavailable', reason: opened.reason }
+			: deleteEntry(opened.entry, backend);
 	const file = deleteFile(options.filePath);
 	if (native.kind === 'ok' || file.kind === 'ok') {
 		return { kind: 'ok' };
@@ -197,180 +219,12 @@ export async function deleteCredential(options: StoreOptions = {}): Promise<Cred
 	return native;
 }
 
-async function readKeychain(run: CommandRunner): Promise<CredentialLookup> {
-	const outcome = await run([
-		MACOS_SECURITY,
-		'find-generic-password',
-		'-s',
-		SERVICE,
-		'-a',
-		ACCOUNT,
-		'-w',
-	]);
-	return match(outcome)
-		.returnType<CredentialLookup>()
-		.with({ kind: 'missing' }, () => ({
-			kind: 'unavailable',
-			reason: 'The security command is unavailable.',
-		}))
-		.with({ kind: 'timeout' }, () => ({
-			kind: 'unavailable',
-			reason: 'The keychain did not respond.',
-		}))
-		.with({ kind: 'failed' }, ({ reason }) => ({ kind: 'unavailable', reason }))
-		.with({ kind: 'exited', exitCode: 0 }, ({ stdout }) => ({
-			kind: 'found',
-			secret: stdout.replace(/\n$/, ''),
-			backend: 'keychain',
-		}))
-		.with({ kind: 'exited', exitCode: NOT_FOUND_EXIT }, () => ({ kind: 'absent' }))
-		.otherwise(({ exitCode }) => ({
-			kind: 'unavailable',
-			reason: `security exited with ${String(exitCode)}. The keychain may be locked.`,
-		}));
-}
-
-/**
- * Writes through `security -i` so the payload never appears in argv, and as a
- * hex blob via -X so no shell-style quoting of the secret is required.
- */
-async function writeKeychain(run: CommandRunner, secret: string): Promise<CredentialChange> {
-	const hex = Buffer.from(secret, 'utf8').toString('hex').toUpperCase();
-	const outcome = await run([MACOS_SECURITY, '-i'], {
-		stdin: `add-generic-password -U -s ${SERVICE} -a ${ACCOUNT} -l "${LABEL}" -X ${hex}\n`,
-	});
-	return changeFrom(outcome, 'security', 'The keychain may be locked.');
-}
-
-async function deleteKeychain(run: CommandRunner): Promise<CredentialChange> {
-	const outcome = await run([
-		MACOS_SECURITY,
-		'delete-generic-password',
-		'-s',
-		SERVICE,
-		'-a',
-		ACCOUNT,
-	]);
-	return changeFrom(outcome, 'security', 'The keychain may be locked.');
-}
-
-async function readSecretService(run: CommandRunner): Promise<CredentialLookup> {
-	const outcome = await run(['secret-tool', 'lookup', 'service', SERVICE, 'account', ACCOUNT]);
-	return match(outcome)
-		.returnType<CredentialLookup>()
-		.with({ kind: 'missing' }, () => ({
-			kind: 'unavailable',
-			reason: 'secret-tool is not installed. On Debian or Ubuntu, install libsecret-tools.',
-		}))
-		.with({ kind: 'timeout' }, () => ({
-			kind: 'unavailable',
-			reason: 'The Secret Service did not respond. No D-Bus session or the keyring is locked.',
-		}))
-		.with({ kind: 'failed' }, ({ reason }) => ({ kind: 'unavailable', reason }))
-		.with({ kind: 'exited', exitCode: 0 }, ({ stdout }) =>
-			stdout === ''
-				? { kind: 'absent' }
-				: {
-						kind: 'found',
-						secret: stdout.replace(/\n$/, ''),
-						backend: 'secret-service',
-					},
-		)
-		.with({ kind: 'exited', exitCode: 1 }, () => ({ kind: 'absent' }))
-		.otherwise(({ exitCode }) => ({
-			kind: 'unavailable',
-			reason: `secret-tool exited with ${String(exitCode)}.`,
-		}));
-}
-
-/** `secret-tool store` reads the secret from stdin until EOF, newlines included. */
-async function writeSecretService(run: CommandRunner, secret: string): Promise<CredentialChange> {
-	const outcome = await run(
-		['secret-tool', 'store', '--label', LABEL, 'service', SERVICE, 'account', ACCOUNT],
-		{ stdin: secret },
-	);
-	return changeFrom(outcome, 'secret-tool', 'No D-Bus session or the keyring is locked.');
-}
-
-async function deleteSecretService(run: CommandRunner): Promise<CredentialChange> {
-	const outcome = await run(['secret-tool', 'clear', 'service', SERVICE, 'account', ACCOUNT]);
-	if (outcome.kind === 'exited' && outcome.exitCode === 1) {
-		return { kind: 'absent' };
+function deleteEntry(entry: CredentialEntry, backend: CredentialBackend): CredentialChange {
+	const outcome = attempt(backend, () => entry.deletePassword());
+	if ('reason' in outcome) {
+		return { kind: 'unavailable', reason: outcome.reason };
 	}
-	return changeFrom(outcome, 'secret-tool', 'No D-Bus session or the keyring is locked.');
-}
-
-async function readDpapi(
-	run: CommandRunner,
-	credentialPath = dpapiPath(),
-): Promise<CredentialLookup> {
-	const outcome = await run(powershell(DPAPI_READ), {
-		env: { EXA_CREDENTIAL_PATH: credentialPath },
-	});
-	return match(outcome)
-		.returnType<CredentialLookup>()
-		.with({ kind: 'missing' }, () => ({
-			kind: 'unavailable',
-			reason: 'powershell is unavailable.',
-		}))
-		.with({ kind: 'timeout' }, () => ({ kind: 'unavailable', reason: 'powershell timed out.' }))
-		.with({ kind: 'failed' }, ({ reason }) => ({ kind: 'unavailable', reason }))
-		.with({ kind: 'exited', exitCode: 0 }, ({ stdout }) => ({
-			kind: 'found',
-			secret: stdout,
-			backend: 'dpapi',
-		}))
-		.with({ kind: 'exited', exitCode: NOT_FOUND_EXIT }, () => ({ kind: 'absent' }))
-		.otherwise(({ exitCode }) => ({
-			kind: 'unavailable',
-			reason: `powershell exited with ${String(exitCode)}. The DPAPI blob may belong to another user.`,
-		}));
-}
-
-async function writeDpapi(
-	run: CommandRunner,
-	secret: string,
-	credentialPath = dpapiPath(),
-): Promise<CredentialChange> {
-	const outcome = await run(powershell(DPAPI_WRITE), {
-		stdin: secret,
-		env: { EXA_CREDENTIAL_PATH: credentialPath },
-	});
-	return changeFrom(outcome, 'powershell', 'DPAPI encryption failed.');
-}
-
-async function deleteDpapi(
-	run: CommandRunner,
-	credentialPath = dpapiPath(),
-): Promise<CredentialChange> {
-	const outcome = await run(powershell(DPAPI_DELETE), {
-		env: { EXA_CREDENTIAL_PATH: credentialPath },
-	});
-	return changeFrom(outcome, 'powershell', 'DPAPI deletion failed.');
-}
-
-function changeFrom(
-	outcome: Awaited<ReturnType<CommandRunner>>,
-	tool: string,
-	lockedHint: string,
-): CredentialChange {
-	return match(outcome)
-		.returnType<CredentialChange>()
-		.with({ kind: 'missing' }, () => ({
-			kind: 'unavailable',
-			reason: `${tool} is unavailable.`,
-		}))
-		.with({ kind: 'timeout' }, () => ({
-			kind: 'unavailable',
-			reason: `${tool} did not respond. ${lockedHint}`,
-		}))
-		.with({ kind: 'failed' }, ({ reason }) => ({ kind: 'unavailable', reason }))
-		.with({ kind: 'exited', exitCode: 0 }, () => ({ kind: 'ok' }))
-		.with({ kind: 'exited', exitCode: NOT_FOUND_EXIT }, () => ({ kind: 'absent' }))
-		.otherwise(({ exitCode }) => ({
-			kind: 'unavailable',
-			reason: `${tool} exited with ${String(exitCode)}. ${lockedHint}`,
-		}));
+	return outcome.ok ? { kind: 'ok' } : { kind: 'absent' };
 }
 
 function readFile(path = credentialFilePath()): CredentialLookup {
