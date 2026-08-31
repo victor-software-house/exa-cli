@@ -65,7 +65,7 @@ export const envContext = createEnvContext();
 const apiKeyParser = bindEnv(
 	optional(
 		option('-k', '--api-key', zod(querySchema, { placeholder: 'key' }), {
-			description: message`Exa API key. Falls back to EXA_API_KEY.`,
+			description: message`Exa API key. Overrides EXA_API_KEY and stored credentials.`,
 		}),
 	),
 	{
@@ -446,6 +446,44 @@ const agentCommand = command(
 	agentOptions,
 );
 
+const authLoginCommand = command(
+	'login',
+	object({
+		command: constant('auth-login'),
+		insecureStorage: withDefault(
+			flag('--insecure-storage', {
+				description: message`Use a permissioned plaintext file only if secure storage is unavailable.`,
+			}),
+			false,
+		),
+	}),
+	{
+		brief: message`Store an Exa API key.`,
+		description: message`Read an API key from a hidden prompt or stdin and store it in the OS credential store.`,
+		footer: commandExamples('exa auth login', 'printf %s "$EXA_API_KEY" | exa auth login'),
+	},
+);
+
+const authLogoutCommand = command('logout', object({ command: constant('auth-logout') }), {
+	brief: message`Delete the stored API key.`,
+	description: message`Remove Exa credentials from secure storage and any opt-in plaintext fallback.`,
+});
+
+const authStatusCommand = command('status', object({ command: constant('auth-status') }), {
+	brief: message`Show credential status.`,
+	description: message`Report the active credential source without revealing the API key.`,
+});
+
+const authCommand = command(
+	'auth',
+	merge(object({}), or(authLoginCommand, authLogoutCommand, authStatusCommand)),
+	{
+		brief: message`Manage API credentials.`,
+		description: message`Store, inspect, or remove the Exa API key.`,
+		footer: commandExamples('exa auth login', 'exa auth status', 'exa auth logout'),
+	},
+);
+
 const doctorCommand = command(
 	'doctor',
 	object({
@@ -485,6 +523,7 @@ export const parser = or(
 	similarCommand,
 	contextCommand,
 	agentCommand,
+	authCommand,
 	doctorCommand,
 	cacheActionCommand,
 );

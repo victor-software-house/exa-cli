@@ -11,7 +11,7 @@ Install the GitHub Release binary with mise (`"github:victor-software-house/exa-
 npx skills add victor-software-house/exa-cli
 ```
 
-Auth is `EXA_API_KEY` or `--api-key`. Do not print the key.
+For interactive use, run `exa auth login`; it stores the key in the OS credential store. For automation, use `EXA_API_KEY`. `--api-key` has highest precedence but can expose the key through the process list. Never print the key.
 
 ## Cost discipline
 

@@ -71,4 +71,12 @@ describe('parser', () => {
 			false,
 		);
 	});
+
+	test('parses auth login with explicit plaintext fallback consent', () => {
+		const result = parse(parser, ['auth', 'login', '--insecure-storage']);
+		expect(result.success).toBe(true);
+		if (result.success && result.value.command === 'auth-login') {
+			expect(result.value.insecureStorage).toBe(true);
+		}
+	});
 });

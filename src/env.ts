@@ -12,12 +12,14 @@ const blankableSchema = z
 	});
 
 const processEnvSchema = z.looseObject({
+	APPDATA: blankableSchema,
 	CI: blankableSchema,
 	EXA_API_KEY: blankableSchema,
 	EXA_API_URL: blankableSchema,
 	FORCE_COLOR: z.string().trim().optional(),
 	NO_COLOR: z.string().trim().optional(),
 	XDG_CACHE_HOME: blankableSchema,
+	XDG_CONFIG_HOME: blankableSchema,
 });
 
 export type Env = z.output<typeof processEnvSchema>;

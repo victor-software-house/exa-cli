@@ -7,6 +7,15 @@ import {
 } from '@cli/agent/wait';
 import { apiKeyDigest } from '@cli/cache/key';
 import { CacheStore, DEFAULT_TTL_SECONDS, defaultCachePath } from '@cli/cache/store';
+import { readApiKeyInput } from '@cli/credentials/input';
+import { resolveApiKey as findApiKey } from '@cli/credentials/resolve';
+import {
+	deleteCredential,
+	describeBackend,
+	readCredential,
+	writeCredential,
+} from '@cli/credentials/store';
+import { env } from '@cli/env';
 import {
 	answer,
 	cancelAgentRun,
@@ -89,8 +98,7 @@ export async function runApp(args?: readonly string[]): Promise<void> {
 async function dispatch(parsed: Parsed): Promise<void> {
 	await match(parsed)
 		.with({ command: 'doctor' }, (value) => {
-			runDoctor(value);
-			return Promise.resolve();
+			return runDoctor(value);
 		})
 		.with({ command: 'cache' }, (value) => {
 			runCache(value);
@@ -105,19 +113,81 @@ async function dispatch(parsed: Parsed): Promise<void> {
 		.with({ command: 'agent-get' }, runAgentGet)
 		.with({ command: 'agent-wait' }, runAgentWait)
 		.with({ command: 'agent-cancel' }, runAgentCancel)
+		.with({ command: 'auth-login' }, runAuthLogin)
+		.with({ command: 'auth-logout' }, runAuthLogout)
+		.with({ command: 'auth-status' }, runAuthStatus)
 		.exhaustive();
 }
 
-function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): void {
+async function runDoctor(parsed: Extract<Parsed, { command: 'doctor' }>): Promise<void> {
 	const cache = new CacheStore(defaultCachePath());
+	const stored = parsed.apiKey === undefined ? await readCredential() : undefined;
+	const apiKeyStatus =
+		parsed.apiKey !== undefined
+			? 'set (option or environment)'
+			: stored?.kind === 'found'
+				? `set (${describeBackend(stored.backend)})`
+				: 'missing';
 	const lines = [
-		`api-key: ${parsed.apiKey === undefined || parsed.apiKey === '' ? 'missing' : 'set'}`,
+		`api-key: ${apiKeyStatus}`,
 		`api-url: ${parsed.apiUrl ?? 'https://api.exa.ai'}`,
 		`cache: ${cache.path}`,
 		`entries: ${String(cache.count())}`,
 	];
+	if (stored?.kind === 'unavailable') {
+		lines.push(`credential-store: unavailable (${stored.reason})`);
+	}
 	cache.close();
 	process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+async function runAuthLogin(parsed: Extract<Parsed, { command: 'auth-login' }>): Promise<void> {
+	let apiKey: string;
+	try {
+		apiKey = await readApiKeyInput();
+	} catch (error) {
+		fail(errorMessageSchema.parse(error));
+	}
+	const changed = await writeCredential(apiKey, { allowFile: parsed.insecureStorage });
+	if (changed.kind !== 'ok') {
+		const fallbackHint = parsed.insecureStorage
+			? ''
+			: ' Re-run with --insecure-storage to use a permissioned plaintext file.';
+		const reason = changed.kind === 'unavailable' ? changed.reason : 'No credential was stored.';
+		fail(`Could not store the API key: ${reason}${fallbackHint}`);
+	}
+	const backend = changed.backend;
+	if (backend === undefined) {
+		fail('The credential store did not report where it saved the API key.');
+	}
+	process.stdout.write(`API key stored in ${describeBackend(backend)}.\n`);
+}
+
+async function runAuthLogout(): Promise<void> {
+	const changed = await deleteCredential();
+	if (changed.kind === 'unavailable') {
+		fail(`Could not remove the stored API key: ${changed.reason}`);
+	}
+	process.stdout.write(
+		changed.kind === 'ok' ? 'Stored API key removed.\n' : 'No stored API key.\n',
+	);
+}
+
+async function runAuthStatus(): Promise<void> {
+	if (env.EXA_API_KEY !== undefined) {
+		process.stdout.write('Authenticated with EXA_API_KEY.\n');
+		return;
+	}
+	const stored = await readCredential();
+	if (stored.kind === 'found') {
+		process.stdout.write(`Authenticated with ${describeBackend(stored.backend)}.\n`);
+		return;
+	}
+	if (stored.kind === 'unavailable') {
+		process.stdout.write(`Not authenticated. Credential store unavailable: ${stored.reason}\n`);
+		return;
+	}
+	process.stdout.write('Not authenticated. Run exa auth login.\n');
 }
 
 function runCache(parsed: Extract<Parsed, { command: 'cache' }>): void {
@@ -283,7 +353,7 @@ async function runAgentCreate(parsed: Extract<Parsed, { command: 'agent-create' 
 		});
 		return;
 	}
-	const apiKey = requireApiKey(parsed.apiKey);
+	const apiKey = await resolveApiKey(parsed.apiKey);
 	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
 	const client = createExaClient({ apiKey, apiUrl });
 	await runWaitAndWrite(parsed, started, 'agent create', async () => {
@@ -327,7 +397,7 @@ async function runAgentGet(parsed: Extract<Parsed, { command: 'agent-get' }>): P
 
 async function runAgentWait(parsed: Extract<Parsed, { command: 'agent-wait' }>): Promise<void> {
 	const started = Date.now();
-	const apiKey = requireApiKey(parsed.apiKey);
+	const apiKey = await resolveApiKey(parsed.apiKey);
 	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
 	const client = createExaClient({ apiKey, apiUrl });
 	await runWaitAndWrite(parsed, started, 'agent wait', () =>
@@ -417,7 +487,7 @@ async function runOperation(options: {
 	disableCache?: boolean;
 	fetchBody: (client: ReturnType<typeof createExaClient>) => Promise<JsonValue>;
 }): Promise<void> {
-	const apiKey = requireApiKey(options.parsed.apiKey);
+	const apiKey = await resolveApiKey(options.parsed.apiKey);
 	const apiUrl = options.parsed.apiUrl ?? 'https://api.exa.ai';
 	const host = new URL(apiUrl).host;
 	const ttlSeconds = options.parsed.ttl ?? DEFAULT_TTL_SECONDS;
@@ -573,11 +643,14 @@ function flagAgentCreateBody(
 	return body;
 }
 
-function requireApiKey(apiKey: string | undefined): string {
-	if (apiKey === undefined || apiKey === '') {
-		fail('Missing API key. Set EXA_API_KEY or pass --api-key.');
+async function resolveApiKey(apiKey: string | undefined): Promise<string> {
+	const resolved = await findApiKey(apiKey);
+	if (resolved.kind === 'found') {
+		return resolved.secret;
 	}
-	return apiKey;
+	const detail =
+		resolved.kind === 'unavailable' ? ` Credential store unavailable: ${resolved.reason}` : '';
+	return fail(`Missing API key. Run exa auth login, set EXA_API_KEY, or pass --api-key.${detail}`);
 }
 
 const errorMessageSchema = z.union([

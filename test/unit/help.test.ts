@@ -16,6 +16,7 @@ describe('CLI help', () => {
 		expect(result.exitCode).toBe(0);
 		expect(output).toContain('Search the web with Exa.');
 		expect(output).toContain('Run and manage research agents.');
+		expect(output).toContain('Manage API credentials.');
 		expect(output).not.toContain('Usage: exa search');
 		expect(output).not.toContain('agent-create');
 		expect(output).not.toContain('--completion');
@@ -49,6 +50,23 @@ describe('CLI help', () => {
 		expect(output).toContain('create');
 		expect(output).toContain('Start a research agent run.');
 		expect(output).toContain('cancel');
+	});
+
+	test('shows nested auth commands and safe login guidance', () => {
+		const auth = runCli('auth', '--help');
+		const login = runCli('auth', 'login', '--help');
+		const authOutput = auth.stdout.toString();
+		const loginOutput = login.stdout.toString();
+
+		expect(auth.exitCode).toBe(0);
+		expect(auth.stderr.toString()).toBe('');
+		expect(authOutput).toContain('login');
+		expect(authOutput).toContain('logout');
+		expect(authOutput).toContain('status');
+		expect(login.exitCode).toBe(0);
+		expect(loginOutput).toContain('hidden prompt or stdin');
+		expect(loginOutput).toContain('--insecure-storage');
+		expect(loginOutput).not.toContain('--api-key');
 	});
 
 	test('does not advertise ignored options', () => {

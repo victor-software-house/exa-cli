@@ -35,9 +35,21 @@ The binary name is `exa`. That can collide with the old `exa` / `eza` ls replace
 
 ## Auth
 
-Set `EXA_API_KEY`, or pass `--api-key`. There is no interactive login.
+For interactive use, store the key in the operating system credential store:
 
-Operator checkouts with the global fnox profile `exa` get the key from mise (`mise.dev.toml` / `mise -E test`). Contributors can export the variable themselves.
+```bash
+exa auth login
+exa auth status
+exa auth logout
+```
+
+`auth login` reads from a hidden prompt on a terminal or from stdin when piped. It uses macOS Keychain, Linux Secret Service through `secret-tool`, and a Windows DPAPI-encrypted file. If secure storage is unavailable, it fails closed. `--insecure-storage` explicitly permits a plaintext fallback at `$XDG_CONFIG_HOME/exa-cli/credentials.json` or `~/.config/exa-cli/credentials.json`, created with mode `0600`.
+
+For automation, set `EXA_API_KEY`. Resolution order is `--api-key`, `EXA_API_KEY`, then the stored credential. Passing a key in `--api-key` can expose it through the process list, so prefer the environment or `exa auth login`.
+
+On Linux, `auth login` requires `secret-tool` and a running Secret Service. Debian and Ubuntu provide it in `libsecret-tools`. Headless and CI environments should use `EXA_API_KEY`.
+
+Operator checkouts with the global fnox profile `exa` get `EXA_API_KEY` from mise (`mise.dev.toml` / `mise -E test`).
 
 ## Commands
 
@@ -52,6 +64,7 @@ exa agent create "narrow research question" --wait --timeout 600
 exa agent get agent_run_…
 exa agent wait agent_run_… --timeout 600
 exa agent cancel agent_run_…
+exa auth status
 exa doctor
 exa cache path|clear|prune
 ```
