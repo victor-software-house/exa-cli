@@ -327,7 +327,7 @@ const contextCommand = command(
 		),
 		tokensNum: optional(
 			option('--tokens-num', zod(tokensNumSchema, { placeholder: 'dynamic' }), {
-				description: message`Token budget, or dynamic.`,
+				description: message`Token budget. Defaults to dynamic.`,
 			}),
 		),
 	}),

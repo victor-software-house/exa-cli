@@ -15,9 +15,12 @@ export type ContextResponse = {
   query?: string;
   response?: string;
   resultsCount?: number;
+  /**
+   * Production can return the documented object or a JSON-encoded string.
+   */
   costDollars?: {
     [key: string]: unknown;
-  };
+  } | string;
   searchTime?: number;
   outputTokens?: number;
   [key: string]: unknown;

@@ -772,6 +772,7 @@ components:
           type: string
           minLength: 1
         tokensNum:
+          default: dynamic
           oneOf:
             - type: integer
               minimum: 50
@@ -789,8 +790,11 @@ components:
         resultsCount:
           type: integer
         costDollars:
-          type: object
-          additionalProperties: true
+          description: Production can return the documented object or a JSON-encoded string.
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
         searchTime:
           type: number
         outputTokens:

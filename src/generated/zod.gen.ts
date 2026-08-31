@@ -8,7 +8,7 @@ export const zContextRequest = z.object({
   tokensNum: z.union([
     z.int().gte(50),
     z.literal('dynamic')
-  ]).optional()
+  ]).optional().default('dynamic')
 });
 
 export const zContextResponse = z.object({
@@ -16,7 +16,10 @@ export const zContextResponse = z.object({
   query: z.string().optional(),
   response: z.string().optional(),
   resultsCount: z.int().optional(),
-  costDollars: z.record(z.string(), z.unknown()).optional(),
+  costDollars: z.union([
+    z.record(z.string(), z.unknown()),
+    z.string()
+  ]).optional(),
   searchTime: z.number().optional(),
   outputTokens: z.int().optional()
 });

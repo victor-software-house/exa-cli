@@ -232,8 +232,10 @@ async function runSimilar(parsed: Extract<Parsed, { command: 'similar' }>): Prom
 
 async function runContext(parsed: Extract<Parsed, { command: 'context' }>): Promise<void> {
 	const started = Date.now();
-	const body =
+	const parsedBody =
 		parsed.request !== undefined ? zGetContextBody.parse(parsed.request) : flagContextBody(parsed);
+	const body: GetContextBody =
+		parsedBody.tokensNum === undefined ? { ...parsedBody, tokensNum: 'dynamic' } : parsedBody;
 	await runOperation({
 		parsed,
 		operation: 'context',
