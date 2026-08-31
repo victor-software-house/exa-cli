@@ -33,6 +33,8 @@ bun src/cli.ts --help
 
 The binary name is `exa`. That can collide with the old `exa` / `eza` ls replacement.
 
+On Alpine and other musl distributions, the binary needs `libstdc++` (`apk add libstdc++`), which every Bun-compiled musl binary links dynamically.
+
 ## Auth
 
 For interactive use, store the key in the operating system credential store:
