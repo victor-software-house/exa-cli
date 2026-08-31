@@ -27,7 +27,7 @@
         "@types/bun": "1.4.0",
         "@types/node": "26.4.0",
         "@victor-software-house/anti-slop": "0.0.1",
-        "bun-release": "0.0.1",
+        "bun-release": "0.0.3",
         "eslint-plugin-zod": "4.10.0",
         "liquidjs": "10.27.2",
         "oxlint": "1.80.0",
@@ -440,7 +440,7 @@
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 
-    "bun-release": ["bun-release@0.0.1", "", { "dependencies": { "p-retry": "8.0.0", "ts-pattern": "5.9.0" } }, "sha512-jkCb/KqAcOOw91bse1a8/hB5/m3V9mazOsgou9oJwCrGWEUjcorpHJ3qdvGMrNwOZvX95+6EFKstqKHl+EJXew=="],
+    "bun-release": ["bun-release@0.0.3", "", { "dependencies": { "ky": "1.14.3", "p-retry": "8.0.0", "ts-pattern": "5.9.0", "zod": "4.5.2" } }, "sha512-HiTNNemC2iSqIXC65NDHr+ToymmtrFhT6WFn0mD2ZNGu+dvLAi6sAHIOND8jqoFcW4mYBoSD75kUP00nYAg8Ww=="],
 
     "bun-types": ["bun-types@1.4.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q=="],
 
@@ -643,6 +643,8 @@
     "jsonfile": ["jsonfile@4.0.0", "", { "optionalDependencies": { "graceful-fs": "^4.1.6" } }, "sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg=="],
 
     "keyv": ["keyv@4.5.4", "", { "dependencies": { "json-buffer": "3.0.1" } }, "sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw=="],
+
+    "ky": ["ky@1.14.3", "", {}, "sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw=="],
 
     "levn": ["levn@0.4.1", "", { "dependencies": { "prelude-ls": "^1.2.1", "type-check": "~0.4.0" } }, "sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ=="],
 
