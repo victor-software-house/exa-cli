@@ -52,7 +52,7 @@ import {
 } from '@cli/output/presenter';
 import { envContext, parser } from '@cli/parser';
 import { version } from '@cli/version';
-import { message } from '@optique/core/message';
+import { commandLine, lineBreak, message } from '@optique/core/message';
 import { run } from '@optique/run';
 import { match } from 'ts-pattern';
 import * as z from 'zod';
@@ -62,10 +62,17 @@ type Parsed = Awaited<ReturnType<typeof runAppParse>>;
 async function runAppParse(args?: readonly string[]) {
 	const options = {
 		programName: 'exa',
-		brief: message`Agent-friendly CLI for the Exa API with a local request cache.`,
+		brief: message`Search, retrieve, and research the web with Exa.`,
+		description: message`A fast, scriptable Exa client with human-readable output, structured JSON, and a local response cache.`,
+		examples: message`${commandLine('exa search "latest TypeScript release"')}${lineBreak()}${commandLine('exa contents https://exa.ai/docs')}${lineBreak()}${commandLine('exa answer "What changed in TypeScript 7?"')}${lineBreak()}${commandLine('exa agent create "Research current database trends" --wait')}`,
+		footer: message`Run exa <command> --help for command-specific options and examples.`,
 		help: 'both' as const,
 		version,
-		completion: 'both' as const,
+		completion: 'command' as const,
+		showUsage: false,
+		commandList: 'top-level' as const,
+		showChoices: true,
+		aboveError: 'none' as const,
 		contexts: [envContext],
 	};
 	if (args === undefined) {
@@ -256,7 +263,7 @@ async function runAgentCreate(parsed: Extract<Parsed, { command: 'agent-create' 
 	if (!shouldWait) {
 		await runOperation({
 			parsed,
-			operation: 'agent-create',
+			operation: 'agent create',
 			body,
 			started,
 			disableCache: true,
@@ -277,7 +284,7 @@ async function runAgentCreate(parsed: Extract<Parsed, { command: 'agent-create' 
 	const apiKey = requireApiKey(parsed.apiKey);
 	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
 	const client = createExaClient({ apiKey, apiUrl });
-	await runWaitAndWrite(parsed, started, 'agent-create', async () => {
+	await runWaitAndWrite(parsed, started, 'agent create', async () => {
 		const created = parseJson(
 			JSON.stringify(
 				await createAgentRun({
@@ -290,7 +297,7 @@ async function runAgentCreate(parsed: Extract<Parsed, { command: 'agent-create' 
 		);
 		const id = jsonStringField(created, 'id');
 		if (id === undefined) {
-			fail('agent-create did not return an id.');
+			fail('agent create did not return an id.');
 		}
 		return await pollAgentRun(client, id, parsed.timeout);
 	});
@@ -300,7 +307,7 @@ async function runAgentGet(parsed: Extract<Parsed, { command: 'agent-get' }>): P
 	const started = Date.now();
 	await runOperation({
 		parsed,
-		operation: 'agent-get',
+		operation: 'agent get',
 		body: { id: parsed.id },
 		started,
 		disableCache: true,
@@ -321,7 +328,7 @@ async function runAgentWait(parsed: Extract<Parsed, { command: 'agent-wait' }>):
 	const apiKey = requireApiKey(parsed.apiKey);
 	const apiUrl = parsed.apiUrl ?? 'https://api.exa.ai';
 	const client = createExaClient({ apiKey, apiUrl });
-	await runWaitAndWrite(parsed, started, 'agent-wait', () =>
+	await runWaitAndWrite(parsed, started, 'agent wait', () =>
 		pollAgentRun(client, parsed.id, parsed.timeout),
 	);
 }
@@ -344,7 +351,7 @@ async function pollAgentRun(
 				),
 			),
 		onStatus: (status) => {
-			process.stderr.write(`agent-wait: ${status}\n`);
+			process.stderr.write(`agent wait: ${status}\n`);
 		},
 	});
 }
@@ -370,7 +377,7 @@ async function runAgentCancel(parsed: Extract<Parsed, { command: 'agent-cancel' 
 	const started = Date.now();
 	await runOperation({
 		parsed,
-		operation: 'agent-cancel',
+		operation: 'agent cancel',
 		body: { id: parsed.id },
 		started,
 		disableCache: true,
@@ -555,7 +562,7 @@ function flagAgentCreateBody(
 	parsed: Extract<Parsed, { command: 'agent-create' }>,
 ): CreateAgentRunBody {
 	if (parsed.query === undefined) {
-		fail('agent-create requires a query or --request.');
+		fail('agent create requires a query or --request.');
 	}
 	const body: CreateAgentRunBody = { query: parsed.query };
 	if (parsed.effort !== undefined) {

@@ -21,7 +21,7 @@ export class AgentWaitTimeoutError extends Error {
 		lastPayload: JsonValue;
 	}) {
 		super(
-			`agent-wait timed out after ${String(options.timeoutMs / 1000)}s (status: ${options.status ?? 'unknown'}, id: ${options.id}).`,
+			`agent wait timed out after ${String(options.timeoutMs / 1000)}s (status: ${options.status ?? 'unknown'}, id: ${options.id}).`,
 		);
 		this.name = 'AgentWaitTimeoutError';
 		this.id = options.id;

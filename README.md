@@ -47,11 +47,11 @@ exa contents https://exa.ai/docs/reference/search.md
 exa answer "when did Exa ship the context endpoint"
 exa similar https://exa.ai/docs/reference/search.md
 exa context "how to use React hooks for state management" --tokens-num 500
-exa agent-create "narrow research question"
-exa agent-create "narrow research question" --wait --timeout 600
-exa agent-get agent_run_…
-exa agent-wait agent_run_… --timeout 600
-exa agent-cancel agent_run_…
+exa agent create "narrow research question"
+exa agent create "narrow research question" --wait --timeout 600
+exa agent get agent_run_…
+exa agent wait agent_run_… --timeout 600
+exa agent cancel agent_run_…
 exa doctor
 exa cache path|clear|prune
 ```
@@ -83,7 +83,7 @@ Every uncached call spends Exa credits. Identical requests within the TTL are se
 - `--refresh` skips the read and overwrites the entry. Use only when staleness provably matters.
 - `--no-cache` skips reads and writes.
 - `exa cache prune` deletes expired entries; `exa cache clear` deletes all; `exa cache path` prints the database location.
-- `agent-create`, `agent-get`, `agent-wait`, and `agent-cancel` never cache: create and cancel mutate, get and wait poll.
+- `agent create`, `agent get`, `agent wait`, and `agent cancel` never cache: create and cancel mutate, get and wait poll.
 
 Do not repeat an identical call in a loop — the first response is already stored.
 

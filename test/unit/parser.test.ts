@@ -52,9 +52,10 @@ describe('parser', () => {
 		}
 	});
 
-	test('parses agent-get with a run id', () => {
+	test('parses nested agent get with a run id', () => {
 		const result = parse(parser, [
-			'agent-get',
+			'agent',
+			'get',
 			'--api-key',
 			'test-key',
 			'agent_run_01j7x9v0m2n4p6q8r0s2t4v6w8',
@@ -63,5 +64,11 @@ describe('parser', () => {
 		if (result.success && result.value.command === 'agent-get') {
 			expect(result.value.id).toBe('agent_run_01j7x9v0m2n4p6q8r0s2t4v6w8');
 		}
+	});
+
+	test('rejects the removed hyphenated agent command', () => {
+		expect(parse(parser, ['agent-get', 'agent_run_01j7x9v0m2n4p6q8r0s2t4v6w8']).success).toBe(
+			false,
+		);
 	});
 });

@@ -7,8 +7,9 @@ import {
 	zSearchBody,
 } from '@cli/generated/zod.gen';
 import { parseJson } from '@cli/json';
-import { object, or } from '@optique/core/constructs';
-import { message } from '@optique/core/message';
+import { merge, object, or } from '@optique/core/constructs';
+import type { Message } from '@optique/core/message';
+import { commandLine, lineBreak, message } from '@optique/core/message';
 import { multiple, optional, withDefault } from '@optique/core/modifiers';
 import { argument, command, constant, flag, negatableFlag, option } from '@optique/core/primitives';
 import { choice } from '@optique/core/valueparser';
@@ -16,6 +17,16 @@ import { bindEnv, createEnvContext } from '@optique/env';
 import { path } from '@optique/run/valueparser';
 import { zod } from '@optique/zod';
 import * as z from 'zod';
+
+function exampleLines(...commands: string[]): Message {
+	return commands.flatMap((example, index) =>
+		index === 0 ? [commandLine(example)] : [lineBreak(), commandLine(example)],
+	);
+}
+
+function commandExamples(...commands: string[]): Message {
+	return message`Examples:${lineBreak()}${exampleLines(...commands)}`;
+}
 
 const querySchema = z
 	.string()
@@ -78,10 +89,14 @@ const apiUrlParser = bindEnv(
 	},
 );
 
-function globalFields() {
+const ttlParser = optional(
+	option('--ttl', zod(countSchema, { placeholder: 86400 }), {
+		description: message`Cache TTL in seconds. Default 86400.`,
+	}),
+);
+
+function outputFields() {
 	return {
-		apiKey: apiKeyParser,
-		apiUrl: apiUrlParser,
 		json: withDefault(
 			flag('--json', { description: message`Write compact JSON to stdout.` }),
 			false,
@@ -99,21 +114,6 @@ function globalFields() {
 			flag('--timing', { description: message`Print elapsed time on stderr.` }),
 			false,
 		),
-		refresh: withDefault(
-			flag('--refresh', {
-				description: message`Ignore cache reads and overwrite the stored response.`,
-			}),
-			false,
-		),
-		noCache: withDefault(
-			flag('--no-cache', { description: message`Skip cache reads and writes.` }),
-			false,
-		),
-		ttl: optional(
-			option('--ttl', zod(countSchema, { placeholder: 86400 }), {
-				description: message`Cache TTL in seconds. Default 86400.`,
-			}),
-		),
 		envelope: withDefault(
 			flag('--envelope', { description: message`Wrap JSON output with cache metadata.` }),
 			false,
@@ -127,11 +127,39 @@ function globalFields() {
 	};
 }
 
+function apiFields() {
+	return {
+		apiKey: apiKeyParser,
+		apiUrl: apiUrlParser,
+		...outputFields(),
+		refresh: constant(false),
+		noCache: constant(true),
+		ttl: constant(undefined),
+	};
+}
+
+function cachedFields() {
+	return {
+		...apiFields(),
+		refresh: withDefault(
+			flag('--refresh', {
+				description: message`Ignore cache reads and overwrite the stored response.`,
+			}),
+			false,
+		),
+		noCache: withDefault(
+			flag('--no-cache', { description: message`Skip cache reads and writes.` }),
+			false,
+		),
+		ttl: ttlParser,
+	};
+}
+
 const searchCommand = command(
 	'search',
 	object({
 		command: constant('search'),
-		...globalFields(),
+		...cachedFields(),
 		query: optional(
 			argument(zod(querySchema, { placeholder: 'query' }), {
 				description: message`Search query. Omit when using --request.`,
@@ -165,13 +193,22 @@ const searchCommand = command(
 			}),
 		),
 	}),
+	{
+		brief: message`Search the web with Exa.`,
+		description: message`Find relevant pages and optionally retrieve focused highlights.`,
+		footer: commandExamples(
+			'exa search "latest TypeScript release"',
+			'exa search "AI research" --include-domain arxiv.org',
+			`exa search --request '{"query":"recent AI news","numResults":5}' --pretty`,
+		),
+	},
 );
 
 const contentsCommand = command(
 	'contents',
 	object({
 		command: constant('contents'),
-		...globalFields(),
+		...cachedFields(),
 		urls: multiple(
 			argument(zod(querySchema, { placeholder: 'URL' }), {
 				description: message`Page URL. Repeatable. Omit when using --request.`,
@@ -195,13 +232,18 @@ const contentsCommand = command(
 			}),
 		),
 	}),
+	{
+		brief: message`Retrieve clean content from URLs.`,
+		description: message`Fetch page contents for one or more URLs.`,
+		footer: commandExamples('exa contents https://exa.ai/docs --max-age-hours 24'),
+	},
 );
 
 const answerCommand = command(
 	'answer',
 	object({
 		command: constant('answer'),
-		...globalFields(),
+		...cachedFields(),
 		query: optional(
 			argument(zod(querySchema, { placeholder: 'query' }), {
 				description: message`Question to answer. Omit when using --request.`,
@@ -224,13 +266,18 @@ const answerCommand = command(
 			false,
 		),
 	}),
+	{
+		brief: message`Generate a cited answer.`,
+		description: message`Answer a question using Exa search with supporting citations.`,
+		footer: commandExamples('exa answer "What changed in TypeScript 7?" --pretty'),
+	},
 );
 
 const similarCommand = command(
 	'similar',
 	object({
 		command: constant('similar'),
-		...globalFields(),
+		...cachedFields(),
 		url: optional(
 			argument(zod(querySchema, { placeholder: 'URL' }), {
 				description: message`Source URL. Omit when using --request.`,
@@ -249,13 +296,18 @@ const similarCommand = command(
 			),
 		),
 	}),
+	{
+		brief: message`Find pages similar to a URL.`,
+		description: message`Discover related pages based on a source URL.`,
+		footer: commandExamples('exa similar https://exa.ai/docs'),
+	},
 );
 
 const contextCommand = command(
 	'context',
 	object({
 		command: constant('context'),
-		...globalFields(),
+		...cachedFields(),
 		query: optional(
 			argument(zod(querySchema, { placeholder: 'query' }), {
 				description: message`Coding query. Omit when using --request.`,
@@ -279,104 +331,151 @@ const contextCommand = command(
 			}),
 		),
 	}),
+	{
+		brief: message`Get code and documentation context.`,
+		description: message`Retrieve compact context tailored for coding tasks and agents.`,
+		footer: commandExamples('exa context "React useEffect cleanup examples" --tokens-num 4000'),
+	},
 );
 
-const agentCreateCommand = command(
-	'agent-create',
-	object({
-		command: constant('agent-create'),
-		...globalFields(),
-		query: optional(
-			argument(zod(querySchema, { placeholder: 'query' }), {
-				description: message`Agent instructions. Omit when using --request.`,
-			}),
-		),
-		request: optional(
-			option(
-				'--request',
-				zod(jsonBody(zCreateAgentRunBody), {
-					metavar: 'JSON',
-					placeholder: zCreateAgentRunBody.parse({ query: 'query' }),
-				}),
-				{
-					description: message`JSON body for POST /agent/runs.`,
-				},
-			),
-		),
-		effort: optional(
-			option('--effort', choice(['minimal', 'low', 'medium', 'high', 'xhigh', 'auto', 'max']), {
-				description: message`Agent effort.`,
-			}),
-		),
-		wait: withDefault(
-			flag('--wait', {
-				description: message`Poll until the run is completed, failed, or cancelled.`,
-			}),
-			false,
-		),
-		timeout: optional(
-			option('--timeout', zod(countSchema, { placeholder: 3600 }), {
-				description: message`Wait timeout in seconds. Default 3600. Implies --wait.`,
-			}),
-		),
-	}),
-);
-
-const agentGetCommand = command(
-	'agent-get',
-	object({
-		command: constant('agent-get'),
-		...globalFields(),
-		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
-			description: message`Agent run ID.`,
+const agentCreateParser = object({
+	command: constant('agent-create'),
+	query: optional(
+		argument(zod(querySchema, { placeholder: 'query' }), {
+			description: message`Agent instructions. Omit when using --request.`,
 		}),
-	}),
-);
-
-const agentCancelCommand = command(
-	'agent-cancel',
-	object({
-		command: constant('agent-cancel'),
-		...globalFields(),
-		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
-			description: message`Agent run ID.`,
-		}),
-	}),
-);
-
-const agentWaitCommand = command(
-	'agent-wait',
-	object({
-		command: constant('agent-wait'),
-		...globalFields(),
-		id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
-			description: message`Agent run ID.`,
-		}),
-		timeout: optional(
-			option('--timeout', zod(countSchema, { placeholder: 3600 }), {
-				description: message`Wait timeout in seconds. Default 3600.`,
+	),
+	request: optional(
+		option(
+			'--request',
+			zod(jsonBody(zCreateAgentRunBody), {
+				metavar: 'JSON',
+				placeholder: zCreateAgentRunBody.parse({ query: 'query' }),
 			}),
+			{
+				description: message`JSON body for POST /agent/runs.`,
+			},
 		),
+	),
+	effort: optional(
+		option('--effort', choice(['minimal', 'low', 'medium', 'high', 'xhigh', 'auto', 'max']), {
+			description: message`Agent effort.`,
+		}),
+	),
+	wait: withDefault(
+		flag('--wait', {
+			description: message`Poll until the run is completed, failed, or cancelled.`,
+		}),
+		false,
+	),
+	timeout: optional(
+		option('--timeout', zod(countSchema, { placeholder: 3600 }), {
+			description: message`Wait timeout in seconds. Default 3600. Implies --wait.`,
+		}),
+	),
+});
+
+const agentGetParser = object({
+	command: constant('agent-get'),
+	id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+		description: message`Agent run ID.`,
 	}),
+});
+
+const agentCancelParser = object({
+	command: constant('agent-cancel'),
+	id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+		description: message`Agent run ID.`,
+	}),
+});
+
+const agentWaitParser = object({
+	command: constant('agent-wait'),
+	id: argument(zod(querySchema, { placeholder: 'agent_run_…' }), {
+		description: message`Agent run ID.`,
+	}),
+	timeout: optional(
+		option('--timeout', zod(countSchema, { placeholder: 3600 }), {
+			description: message`Wait timeout in seconds. Default 3600.`,
+		}),
+	),
+});
+
+const agentOptions = {
+	brief: message`Run and manage research agents.`,
+	description: message`Create, inspect, wait for, and cancel Exa research agent runs.`,
+	footer: commandExamples(
+		'exa agent create "Research current database trends" --wait',
+		'exa agent get agent_run_…',
+		'exa agent wait agent_run_…',
+	),
+};
+
+const agentCreateCommand = command('create', agentCreateParser, {
+	brief: message`Start a research agent run.`,
+	description: message`Create an asynchronous Exa research agent run, optionally waiting for completion.`,
+	footer: commandExamples(
+		'exa agent create "Compare current TypeScript runtimes" --effort medium --wait',
+	),
+});
+
+const agentGetCommand = command('get', agentGetParser, {
+	brief: message`Get an agent run.`,
+	description: message`Read the current state and result of an agent run.`,
+	footer: commandExamples('exa agent get agent_run_… --pretty'),
+});
+
+const agentWaitCommand = command('wait', agentWaitParser, {
+	brief: message`Wait for an agent run.`,
+	description: message`Poll an agent run until it completes, fails, is cancelled, or times out.`,
+	footer: commandExamples('exa agent wait agent_run_… --timeout 1800'),
+});
+
+const agentCancelCommand = command('cancel', agentCancelParser, {
+	brief: message`Cancel an agent run.`,
+	description: message`Request cancellation of an active agent run.`,
+	footer: commandExamples('exa agent cancel agent_run_…'),
+});
+
+const agentCommand = command(
+	'agent',
+	merge(
+		object(apiFields()),
+		or(agentCreateCommand, agentGetCommand, agentWaitCommand, agentCancelCommand),
+	),
+	agentOptions,
 );
 
 const doctorCommand = command(
 	'doctor',
 	object({
 		command: constant('doctor'),
-		...globalFields(),
+		apiKey: apiKeyParser,
+		apiUrl: apiUrlParser,
 	}),
+	{
+		brief: message`Inspect configuration and cache health.`,
+		description: message`Show API configuration, cache location, and cached entry count.`,
+	},
 );
 
 const cacheActionCommand = command(
 	'cache',
 	object({
 		command: constant('cache'),
-		...globalFields(),
-		action: argument(choice(['path', 'clear', 'prune']), {
-			description: message`Cache action: show the path, delete all entries, or delete expired entries.`,
-		}),
+		ttl: ttlParser,
+		action: argument(
+			choice(['path', 'clear', 'prune'], { metavar: 'ACTION', suggest: 'nearest' }),
+			{
+				description: message`Cache action: show the path, delete all entries, or delete expired entries.`,
+			},
+		),
 	}),
+	{
+		brief: message`Manage the local response cache.`,
+		description: message`Show the cache path, clear all entries, or prune expired entries.`,
+		footer: commandExamples('exa cache path', 'exa cache prune --ttl 86400', 'exa cache clear'),
+	},
 );
 
 export const parser = or(
@@ -385,10 +484,7 @@ export const parser = or(
 	answerCommand,
 	similarCommand,
 	contextCommand,
-	agentCreateCommand,
-	agentGetCommand,
-	agentWaitCommand,
-	agentCancelCommand,
+	agentCommand,
 	doctorCommand,
 	cacheActionCommand,
 );
