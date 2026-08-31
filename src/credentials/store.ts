@@ -118,7 +118,19 @@ async function openEntry(
 	if (factory === undefined) {
 		return { reason: 'The credential store addon is unavailable in this build.' };
 	}
-	return { entry: factory(SERVICE, ACCOUNT) };
+	// Constructing an Entry already opens platform storage, so it throws on a
+	// headless Linux box long before any read or write.
+	const opened = attempt(backend, () => factory(SERVICE, ACCOUNT));
+	return 'reason' in opened ? { reason: opened.reason } : { entry: opened.ok };
+}
+
+/**
+ * The addon reports a Rust error chain across several lines. Reasons are shown
+ * inline in one-line messages, and the chain here only repeats the first line.
+ */
+function firstLine(message: string): string {
+	const line = message.split('\n')[0]?.trim() ?? '';
+	return line === '' ? message.replace(/\s+/g, ' ').trim() : line;
 }
 
 /**
@@ -132,7 +144,7 @@ function attempt<T>(
 	try {
 		return { ok: action() };
 	} catch (error) {
-		const detail = error instanceof Error ? error.message : String(error);
+		const detail = firstLine(error instanceof Error ? error.message : String(error));
 		const hint = match(backend)
 			.with('keychain', () => 'The keychain may be locked.')
 			.with('secret-service', () => 'No D-Bus session, or the keyring is locked.')

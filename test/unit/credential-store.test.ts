@@ -23,6 +23,21 @@ function tempPath(): string {
 	return join(directory, 'credentials.json');
 }
 
+/** A store whose very construction fails, as on a headless Linux box. */
+const refuses: CredentialEntryFactory = () => {
+	throw new Error('Couldn\u2019t access platform storage: PermissionDenied');
+};
+
+/** Same failure, reported with the addon's multi-line Rust error chain. */
+const refusesWithChain: CredentialEntryFactory = () => {
+	throw new Error(
+		'Couldn\u2019t access platform storage: PermissionDenied\n\nCaused by:\n    PermissionDenied',
+	);
+};
+
+const REFUSED_REASON =
+	'Couldn\u2019t access platform storage: PermissionDenied No D-Bus session, or the keyring is locked.';
+
 /** Stands in for `@napi-rs/keyring`'s Entry so tests never touch a real store. */
 function fakeStore(options: { initial?: string | null; throws?: Error } = {}) {
 	let value = options.initial ?? null;
@@ -110,6 +125,27 @@ describe('credential store', () => {
 			kind: 'unavailable',
 			reason: 'access denied No D-Bus session, or the keyring is locked.',
 		});
+	});
+
+	test('reports a store that cannot even be opened as unavailable', async () => {
+		expect(
+			await readCredential({ platform: 'linux', entry: refuses, filePath: tempPath() }),
+		).toEqual({ kind: 'unavailable', reason: REFUSED_REASON });
+		expect(await deleteCredential({ platform: 'linux', entry: refuses })).toEqual({
+			kind: 'unavailable',
+			reason: REFUSED_REASON,
+		});
+	});
+
+	test('keeps a multi-line addon error on one line', async () => {
+		const result = await readCredential({
+			platform: 'linux',
+			entry: refusesWithChain,
+			filePath: tempPath(),
+		});
+
+		expect(result).toEqual({ kind: 'unavailable', reason: REFUSED_REASON });
+		expect(result.kind === 'unavailable' && result.reason).not.toContain('\n');
 	});
 
 	test('refuses platforms with no credential store', async () => {
