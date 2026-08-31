@@ -1,6 +1,6 @@
 {
 	"name": "@victor-software-house/exa-cli",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "Agent-friendly CLI for the Exa API with a local SQLite request cache.",
 	"license": "MIT",
 	"author": {
