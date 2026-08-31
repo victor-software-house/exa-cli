@@ -80,7 +80,8 @@ The npm umbrella is launcher-only: `bin/exa.mjs` (Node ≥ 20) resolves the os/c
 
 - Never run `changeset version` or `changeset publish` locally.
 - Never hand-edit versions in `package.json` or `CHANGELOG.md` after the `0.0.0` scaffold.
-- `minor` only for notable new surface. Never `major` on `0.x` unless explicitly decided.
+- Default every changeset to `patch`. A `minor` or `major` bump requires an explicit
+  operator decision for that specific release; never infer it from feature size.
 - No `NPM_TOKEN` / `NODE_AUTH_TOKEN` in workflows. Auth is `$BUN_CONFIG_TOKEN` via bunfig.
 - Runners are GitHub-hosted, not Namespace. Compilation uses a native matrix: `macos-latest`, `macos-15-intel`, `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-latest`, and an Alpine container for musl. All are free for public repositories. Everything else runs on `ubuntu-24.04`.
 
