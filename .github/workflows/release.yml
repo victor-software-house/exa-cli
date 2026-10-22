@@ -87,7 +87,7 @@ jobs:
   build-musl:
     needs: verify
     runs-on: ubuntu-24.04
-    container: oven/bun:1.4.0-alpine
+    container: oven/bun:1.4.4-alpine
     steps:
       - name: Install checkout prerequisites
         run: apk add --no-cache git

@@ -5,7 +5,7 @@ fnox-export = "https://github.com/victor-software-house/fnox-export.git"
 
 [tools]
 node = "26.8.1"
-bun = "1.4.0"
+bun = "1.4.4"
 lefthook = "2.1.10"
 
 [settings]
