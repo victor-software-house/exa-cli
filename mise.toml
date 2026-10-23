@@ -1,4 +1,4 @@
-min_version = "2026.7.7"
+min_version = "2026.10.17"
 
 [plugins]
 fnox-export = "https://github.com/victor-software-house/fnox-export.git"
